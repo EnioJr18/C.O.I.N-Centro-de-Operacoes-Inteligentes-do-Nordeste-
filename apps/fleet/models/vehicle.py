@@ -1,5 +1,7 @@
 from django.contrib.gis.db import models
 from django.db.models import JSONField
+from django.contrib.postgres.indexes import GinIndex
+
 
 class FleetUnit(models.Model):
     class UnitStatus(models.TextChoices):
@@ -32,9 +34,8 @@ class FleetUnit(models.Model):
 
     class Meta:
         db_table = 'fleet_units'
-        # Índice GIN para buscas incrivelmente rápidas dentro do JSON
         indexes = [
-            models.Index(fields=['capabilities'], name='capabilities_gin_idx', opclasses=['jsonb_path_ops']),
+            GinIndex(fields=['capabilities'], name='capabilities_idx', opclasses=['jsonb_path_ops']),
         ]
 
     def __str__(self):
