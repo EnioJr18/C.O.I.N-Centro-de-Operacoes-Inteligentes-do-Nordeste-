@@ -15,6 +15,7 @@ DEBUG = env.bool('DEBUG', default=False)
 ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -40,6 +41,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
 TEMPLATES = [
     {
@@ -79,3 +81,12 @@ if os.name == 'nt':
 
     GDAL_LIBRARY_PATH = os.path.join(OSGEO4W_BIN, 'gdal312.dll') 
     GEOS_LIBRARY_PATH = os.path.join(OSGEO4W_BIN, 'geos_c.dll')
+
+
+CHANNEL_LAYERS = {
+    "default": {
+        # Usando a memória RAM local (Apenas para Desenvolvimento)
+        # Em produção (AWS), nós trocaríamos isso pelo Redis.
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
