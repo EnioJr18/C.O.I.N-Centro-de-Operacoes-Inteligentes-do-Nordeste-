@@ -1,19 +1,21 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from .models.mission import Mission
 from .models.history import MissionHistory
 
-# 1. O Rádio que toca ANTES de salvar no banco
-@receiver(post_save, sender=Mission)
-def captura_status_antigo(sender, instance, **kwargrs):
-    if instance.id:
-        old_mission = Mission.objects.get(id=instance.id)
-        instance._old_status = old_mission.status
-    else:
-        instance._old_status = None
-        
+@receiver(pre_save, sender=Mission)
+def capture_previous_status(sender, instance, **kwargs):
+    if not instance.pk:
+        instance._previous_status = None
+        return
 
-# 2. O Rádio que toca DEPOIS de salvar no banco
+    instance._previous_status = (
+        sender.objects.filter(pk=instance.pk)
+        .values_list("status", flat=True)
+        .first()
+    )
+
+
 @receiver(post_save, sender=Mission)
 def create_mission_history(sender, instance, created, **kwargs):
     if created:
@@ -22,10 +24,12 @@ def create_mission_history(sender, instance, created, **kwargs):
             status=instance.status,
             notes="Missão criada"
         )
-    else:
-        if hasattr(instance, '_old_status') and instance._old_status != instance.status:
-            MissionHistory.objects.create(
-                mission=instance, 
-                status=instance.status, 
-                notes=f"Status atualizado de '{instance._old_status}' para '{instance.status}'."
-            )
+    elif instance._previous_status != instance.status:
+        MissionHistory.objects.create(
+            mission=instance,
+            status=instance.status,
+            notes=(
+                f"Status atualizado de '{instance._previous_status}' "
+                f"para '{instance.status}'."
+            ),
+        )

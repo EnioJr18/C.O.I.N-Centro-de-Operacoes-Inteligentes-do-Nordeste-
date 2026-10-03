@@ -12,7 +12,10 @@ def get_nearest_available_units(
 ) -> list[FleetUnit]:
     emergency_point = Point(lon, lat, srid=4326)
 
-    queryset = FleetUnit.objects.filter(status=FleetUnit.UnitStatus.AVAILABLE)
+    queryset = FleetUnit.objects.filter(
+        status=FleetUnit.UnitStatus.AVAILABLE,
+        current_location__isnull=False,
+    )
 
     if required_type:
         queryset = queryset.filter(unit_type=required_type)
