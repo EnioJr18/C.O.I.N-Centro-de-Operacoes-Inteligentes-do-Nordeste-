@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_spectacular',
     'django.contrib.gis',
     'django.contrib.postgres',
     'authentication.apps.AuthenticationConfig',
@@ -78,6 +79,17 @@ AUTH_PASSWORD_VALIDATORS = [{'NAME': 'django.contrib.auth.password_validation.Mi
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework_simplejwt.authentication.JWTAuthentication',),
     'DEFAULT_PERMISSION_CLASSES': ('rest_framework.permissions.IsAuthenticated',),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'EXCEPTION_HANDLER': 'dispatch.api_exceptions.api_exception_handler',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'C.O.I.N. API',
+    'DESCRIPTION': 'API REST do Centro de Operações Inteligentes.',
+    'VERSION': 'v1',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 
 if os.name == 'nt':

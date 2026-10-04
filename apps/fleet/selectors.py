@@ -3,6 +3,15 @@ from django.contrib.gis.geos import Point
 from .models.vehicle import FleetUnit
 
 
+def get_fleet_units(status: str | None = None, unit_type: str | None = None):
+    queryset = FleetUnit.objects.all()
+    if status:
+        queryset = queryset.filter(status=status)
+    if unit_type:
+        queryset = queryset.filter(unit_type=unit_type)
+    return queryset
+
+
 def get_nearest_available_units(
     lat: float,
     lon: float,

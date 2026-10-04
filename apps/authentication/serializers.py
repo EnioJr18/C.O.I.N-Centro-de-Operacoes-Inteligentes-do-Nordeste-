@@ -30,7 +30,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
         model = User
         fields = ('id', 'username', 'first_name', 'last_name', 'email', 'is_active', 'role')
         read_only_fields = fields
-    def get_role(self, user):
+    def get_role(self, user) -> str | None:
         return user_role(user)
 
 

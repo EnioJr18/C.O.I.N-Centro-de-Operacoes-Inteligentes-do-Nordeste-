@@ -117,7 +117,10 @@ class DispatchEmergencyViewTestCase(TestCase):
         )
 
     def valid_payload(self, **overrides):
-        payload = {"description": "Ocorrência clínica", "latitude": -9.0, "longitude": -35.0}
+        payload = {
+            "description": "Ocorrência clínica",
+            "location": {"latitude": -9.0, "longitude": -35.0},
+        }
         payload.update(overrides)
         return payload
 
@@ -175,8 +178,8 @@ class DispatchEmergencyViewTestCase(TestCase):
 
         for payload in (
             {"latitude": -9.0, "longitude": -35.0},
-            self.valid_payload(latitude=91),
-            self.valid_payload(longitude="-35"),
+            self.valid_payload(location={"latitude": 91, "longitude": -35.0}),
+            self.valid_payload(location={"latitude": -9.0, "longitude": "-35"}),
             self.valid_payload(required_type="INVALID"),
             self.valid_payload(requirements=["oxygen"]),
         ):
@@ -192,15 +195,15 @@ class DispatchEmergencyViewTestCase(TestCase):
 
         with (
             patch(
-                "fleet.controllers.dispatch_controller.dispatch_emergency",
+                "dispatch.api_views.dispatch_emergency",
                 side_effect=RuntimeError("detalhe interno sensível"),
             ),
-            patch("fleet.controllers.dispatch_controller.logger.exception"),
+            patch("dispatch.api_exceptions.logger.exception"),
         ):
             response = self.post(self.valid_payload())
 
         self.assertEqual(response.status_code, 500)
-        self.assertNotIn("detalhe interno", response.json()["error"])
+        self.assertNotIn("detalhe interno", response.json()["detail"])
 
     def test_busy_unit_cannot_be_assigned_to_a_pending_mission(self):
         unit = self.create_unit(status=FleetUnit.UnitStatus.BUSY)

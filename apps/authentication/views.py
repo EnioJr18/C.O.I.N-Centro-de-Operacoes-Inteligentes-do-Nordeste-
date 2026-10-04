@@ -14,6 +14,7 @@ class RefreshView(TokenRefreshView):
     permission_classes = [AllowAny]
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = CurrentUserSerializer
     def get(self, request): return Response(CurrentUserSerializer(request.user).data)
 class UserListView(ListCreateAPIView):
     permission_classes = [IsAdminRole]
