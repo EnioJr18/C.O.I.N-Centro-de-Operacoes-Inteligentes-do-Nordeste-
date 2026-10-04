@@ -1,9 +1,7 @@
 import json
 import logging
 from django.http import JsonResponse
-from django.views import View
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
+from rest_framework.views import APIView
 from fleet.models.vehicle import FleetUnit, UnitType
 from dispatch.services import (
     DispatchDomainError,
@@ -14,6 +12,7 @@ from dispatch.services import (
 )
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from authentication.permissions import IsOperatorOrAdmin
 
 
 logger = logging.getLogger(__name__)
@@ -44,8 +43,8 @@ def _validate_payload(data):
 
     return description, lat, lon, required_type, requirements
 
-@method_decorator(csrf_exempt, name='dispatch')
-class DispatchEmergencyView(View):
+class DispatchEmergencyView(APIView):
+    permission_classes = [IsOperatorOrAdmin]
     def post(self, request, *args, **kwargs):
         try:
             data = json.loads(request.body)

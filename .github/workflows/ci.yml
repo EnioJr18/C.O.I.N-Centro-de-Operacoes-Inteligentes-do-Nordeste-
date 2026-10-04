@@ -80,7 +80,7 @@ jobs:
       - name: Verify PostGIS service
         run: >-
           python -c "import django; django.setup(); from django.db import connection;
-          cursor = connection.cursor(); cursor.execute('SELECT PostGIS_Version()');
+          cursor = connection.cursor(); cursor.execute('SELECT postgis_full_version()');
           print(cursor.fetchone()[0]); cursor.close()"
 
       - name: Compile Python sources

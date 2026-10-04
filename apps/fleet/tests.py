@@ -5,6 +5,8 @@ from django.contrib.gis.geos import Point
 from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
+from django.contrib.auth.models import User
+from rest_framework.test import APIClient
 
 from dispatch.services import UnitUnavailableError, create_mission, assign_unit_to_mission
 from fleet.models.vehicle import FleetUnit, UnitType
@@ -92,6 +94,10 @@ class NearestAvailableUnitsTestCase(TestCase):
 
 
 class DispatchEmergencyViewTestCase(TestCase):
+    def setUp(self):
+        self.operator = User.objects.create_user('operator', 'operator@example.com', 'StrongPassword123')
+        self.client = APIClient()
+        self.client.force_authenticate(self.operator)
     def create_unit(self, **overrides):
         values = {
             "name": "Alfa 01",
@@ -123,6 +129,43 @@ class DispatchEmergencyViewTestCase(TestCase):
         self.assertEqual(response.status_code, 201)
         unit.refresh_from_db()
         self.assertEqual(unit.status, FleetUnit.UnitStatus.BUSY)
+
+    def test_requires_valid_authentication(self):
+        self.create_unit()
+        anonymous_client = APIClient()
+        invalid_token_client = APIClient()
+        invalid_token_client.credentials(HTTP_AUTHORIZATION="Bearer invalid-token")
+
+        self.assertEqual(
+            anonymous_client.post(
+                reverse("fleet:dispatch_emergency"),
+                data=json.dumps(self.valid_payload()),
+                content_type="application/json",
+            ).status_code,
+            401,
+        )
+        self.assertEqual(
+            invalid_token_client.post(
+                reverse("fleet:dispatch_emergency"),
+                data=json.dumps(self.valid_payload()),
+                content_type="application/json",
+            ).status_code,
+            401,
+        )
+
+    def test_rejects_user_without_operational_role_and_allows_admin(self):
+        self.create_unit()
+        unauthorized = User.objects.create_user(
+            'no-role', 'no-role@example.com', 'StrongPassword123'
+        )
+        unauthorized.profile.delete()
+        unauthorized.refresh_from_db()
+        self.client.force_authenticate(unauthorized)
+        self.assertEqual(self.post(self.valid_payload()).status_code, 403)
+
+        admin = User.objects.create_superuser('admin', 'admin@example.com', 'StrongPassword123')
+        self.client.force_authenticate(admin)
+        self.assertEqual(self.post(self.valid_payload()).status_code, 201)
 
     def test_rejects_invalid_json_and_payloads(self):
         invalid_json = self.client.post(

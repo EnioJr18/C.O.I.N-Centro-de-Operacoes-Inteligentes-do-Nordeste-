@@ -8,7 +8,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, os.path.join(BASE_DIR, 'apps'))
 
 env = environ.Env()
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+# Process-level configuration takes precedence for CI and isolated test runs.
+# Local development continues to fall back to the untracked .env file.
+if not os.environ.get('SECRET_KEY') or not os.environ.get('DATABASE_URL'):
+    environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env.bool('DEBUG', default=False)
@@ -25,6 +28,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'django.contrib.gis',
     'django.contrib.postgres',
+    'authentication.apps.AuthenticationConfig',
     'fleet',
     'dispatch',
 ]
@@ -70,6 +74,11 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+AUTH_PASSWORD_VALIDATORS = [{'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'}]
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework_simplejwt.authentication.JWTAuthentication',),
+    'DEFAULT_PERMISSION_CLASSES': ('rest_framework.permissions.IsAuthenticated',),
+}
 
 if os.name == 'nt':
     OSGEO4W_BIN = r'C:\OSGeo4W\bin'
