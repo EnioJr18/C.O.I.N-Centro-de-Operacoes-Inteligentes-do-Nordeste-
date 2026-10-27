@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -16,6 +17,17 @@ if not os.environ.get('SECRET_KEY') or not os.environ.get('DATABASE_URL'):
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env.bool('DEBUG', default=False)
 ALLOWED_HOSTS = []
+WEBSOCKET_ALLOWED_ORIGINS = env.list('WEBSOCKET_ALLOWED_ORIGINS', default=[])
+for origin in WEBSOCKET_ALLOWED_ORIGINS:
+    parsed = urlsplit(origin)
+    if (parsed.scheme not in ('http', 'https') or not parsed.hostname
+            or '*' in origin or parsed.hostname.startswith('.')
+            or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment):
+        raise ValueError('WEBSOCKET_ALLOWED_ORIGINS deve conter apenas origens HTTP(S) explícitas.')
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise ValueError('Porta inválida em WEBSOCKET_ALLOWED_ORIGINS.') from exc
 
 INSTALLED_APPS = [
     'daphne',

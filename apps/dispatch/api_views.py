@@ -1,13 +1,12 @@
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from drf_spectacular.utils import extend_schema
+from django.db import transaction
 from rest_framework import status
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from authentication.permissions import IsOperatorOrAdmin
-from fleet.models.vehicle import FleetUnit
+from fleet.events import build_dispatch_event, publish_fleet_event
 
 from .api_serializers import (
     DispatchRequestSerializer,
@@ -79,22 +78,8 @@ class DispatchEmergencyAPIView(APIView):
             requirements=serializer.validated_data.get('requirements'),
         )
 
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            'fleet_updates',
-            {
-                'type': 'send_fleet_update',
-                'message': {
-                    'action': 'DISPATCH',
-                    'unit_id': mission.assigned_unit_id,
-                    'unit_name': mission.assigned_unit.name,
-                    'new_status': FleetUnit.UnitStatus.BUSY,
-                    'mission_id': mission.id,
-                    'lat': point.y,
-                    'lon': point.x,
-                },
-            },
-        )
+        event = build_dispatch_event(mission, point)
+        transaction.on_commit(lambda: publish_fleet_event(event))
         payload = {
             'mission': mission,
             'dispatched_unit': mission.assigned_unit,

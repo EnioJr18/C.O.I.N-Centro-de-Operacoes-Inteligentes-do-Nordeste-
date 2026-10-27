@@ -1,25 +1,95 @@
+import asyncio
 import json
+import logging
+import time
+
 from channels.generic.websocket import AsyncWebsocketConsumer
 
-class FleetConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
-        self.group_name = 'fleet_updates'
+from authentication.websocket import PROTOCOL, has_operational_access
 
-        await self.channel_layer.group_add(
-            self.group_name,
-            self.channel_name
-        )
-        
-        await self.accept()
-        print("🚑 Novo Mapa Conectado ao C.O.I.N.!")
+logger = logging.getLogger(__name__)
+
+
+class FleetConsumer(AsyncWebsocketConsumer):
+    group_name = 'fleet_updates'
+
+    async def connect(self):
+        self.joined = False
+        self.closed = False
+        self.expiry_task = None
+        self.lifecycle_lock = asyncio.Lock()
+        identity = self.scope.get('coin_identity')
+        if not identity:
+            await self.close(code=4401)
+            return
+        self.user_id, self.expires_at = identity
+        if not await has_operational_access(self.user_id):
+            await self.close(code=4403)
+            return
+        if time.time() >= self.expires_at:
+            await self.close(code=4401)
+            return
+
+        await self.accept(subprotocol=PROTOCOL)
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        self.joined = True
+        self.expiry_task = asyncio.create_task(self._expire())
+
+    async def _expire(self):
+        try:
+            await asyncio.sleep(max(0, self.expires_at - time.time()))
+            async with self.lifecycle_lock:
+                await self._close_authorized_connection(4401)
+        except Exception:
+            logger.error('Falha ao encerrar conexão WebSocket expirada.')
+
+    async def _close_authorized_connection(self, code):
+        if self.closed:
+            return
+        self.closed = True
+        task = self.expiry_task
+        if task and task is not asyncio.current_task():
+            task.cancel()
+        try:
+            if self.joined:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        except Exception:
+            logger.error('Falha ao remover conexão do grupo de frota.')
+        finally:
+            self.joined = False
+            await self.close(code=code)
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(
-            self.group_name,
-            self.channel_name
-        )
-        print("🔌 Mapa Desconectado.")
+        task = self.expiry_task
+        if task and task is not asyncio.current_task():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        async with self.lifecycle_lock:
+            self.closed = True
+            if self.joined:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+                self.joined = False
 
     async def send_fleet_update(self, event):
-        dados = event['message']
-        await self.send(text_data=json.dumps(dados))
+        async with self.lifecycle_lock:
+            if self.closed:
+                return
+            if time.time() >= self.expires_at:
+                await self._close_authorized_connection(4401)
+                return
+            try:
+                authorized = await has_operational_access(self.user_id)
+            except Exception:
+                logger.error('Falha ao revalidar autorização WebSocket.')
+                await self._close_authorized_connection(1011)
+                return
+            if not authorized:
+                await self._close_authorized_connection(4403)
+                return
+            if time.time() >= self.expires_at:
+                await self._close_authorized_connection(4401)
+                return
+            await self.send(text_data=json.dumps(event['message']))

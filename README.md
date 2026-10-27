@@ -62,6 +62,20 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+## WebSocket de atualizações da frota
+
+Configure `WEBSOCKET_ALLOWED_ORIGINS` como uma lista separada por vírgulas de origens HTTP(S) exatas, incluindo a porta quando necessária. O padrão é vazio e recusa todas as origens; em produção configure apenas as origens autorizadas. O exemplo local está em `.env.example`. Origens ausentes são recusadas.
+
+Um cliente autenticado oferece os subprotocolos, nesta ordem, `coin.v1` e `coin.jwt.<access-token>` ao conectar em `/ws/fleet/`. O servidor negocia somente `coin.v1`. Não coloque o token na URL nem registre os subprotocolos em logs de proxy ou aplicação. Use `wss://` em produção. Somente usuários ativos com papel OPERADOR ou ADMIN, ou superusuários ativos, recebem eventos. A conexão estabelecida fecha com código `4401` quando o token expira e `4403` quando a autorização é revogada. Na recusa durante o handshake, navegadores podem não expor esses códigos.
+
+O evento de despacho mantém `action`, `unit_id`, `unit_name`, `new_status`, `mission_id`, `lat` e `lon`, e acrescenta `event_id` (UUID), `schema_version` (inteiro, atualmente 1) e `occurred_at` (data UTC ISO 8601). Exemplo:
+
+```json
+{"event_id":"c6127b0a-99fb-48ad-a625-d978e33f9fa3","schema_version":1,"occurred_at":"2026-10-27T12:30:00+00:00","action":"DISPATCH","unit_id":1,"unit_name":"Alfa 01","new_status":"BUSY","mission_id":42,"lat":-9.0,"lon":-35.0}
+```
+
+A publicação ocorre após o commit e é uma notificação em tempo real sem garantia de entrega. Após reconectar, o cliente deve reconciliar seu estado consultando a API HTTP. A camada em memória é limitada a um processo e não compartilha eventos entre workers.
+
 ## 🤝 Contribuição
 Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou enviar pull requests.
 
