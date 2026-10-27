@@ -62,6 +62,16 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+## Frontend operacional
+
+O diretório `frontend/` contém React, TypeScript, Vite, Tailwind CSS e Leaflet. Requer Node.js 24 e npm. Na pasta `frontend`, execute `npm ci` e depois `npm run dev`. O servidor usa `http://localhost:5173` com porta fixa.
+
+O Vite encaminha `/api/` e `/ws/` ao backend local. Para alterar o destino, copie `frontend/.env.example` para `frontend/.env.local` e ajuste `COIN_BACKEND_ORIGIN`; não coloque credenciais nesse arquivo. No backend, configure `WEBSOCKET_ALLOWED_ORIGINS` com a origem exata usada no navegador (por exemplo, `http://localhost:5173`), e inicie o servidor ASGI. Em produção, configure um proxy para a API e para o upgrade WebSocket, mantendo a validação de origem; não use o servidor Vite de desenvolvimento como implantação.
+
+Verificações do frontend: `npm run typecheck`, `npm test` e `npm run build`. Os testes simulam rede e não precisam de Neon, Redis ou tiles. Para integração manual, utilize um PostgreSQL/PostGIS local isolado, aplique as migrations apenas nesse banco, crie um operador temporário e inicie o backend ASGI; entre com esse operador no frontend, confira a frota e dispare uma emergência pela API a partir de outro cliente autorizado. Nunca use dados de produção para esse teste.
+
+Os tokens ficam somente em memória: atualizar ou fechar a página exige novo login. O botão Sair limpa a sessão local, mas não revoga o refresh token no servidor. O mapa usa tiles públicos do OpenStreetMap com atribuição; o serviço é limitado e sem garantia de disponibilidade, por isso uma operação em escala precisa avaliar outro provedor ou infraestrutura própria. A localização exibida vem da API; não há rastreamento GPS ao vivo nem telas de cadastro, conclusão ou cancelamento de missões nesta versão.
+
 ## WebSocket de atualizações da frota
 
 Configure `WEBSOCKET_ALLOWED_ORIGINS` como uma lista separada por vírgulas de origens HTTP(S) exatas, incluindo a porta quando necessária. O padrão é vazio e recusa todas as origens; em produção configure apenas as origens autorizadas. O exemplo local está em `.env.example`. Origens ausentes são recusadas.
