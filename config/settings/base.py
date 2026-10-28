@@ -9,10 +9,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, os.path.join(BASE_DIR, 'apps'))
 
 env = environ.Env()
-# Process-level configuration takes precedence for CI and isolated test runs.
-# Local development continues to fall back to the untracked .env file.
-if not os.environ.get('SECRET_KEY') or not os.environ.get('DATABASE_URL'):
-    environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env.bool('DEBUG', default=False)
@@ -117,9 +113,7 @@ if os.name == 'nt':
 
 
 CHANNEL_LAYERS = {
-    "default": {
-        # Usando a memória RAM local (Apenas para Desenvolvimento)
-        # Em produção (AWS), nós trocaríamos isso pelo Redis.
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-    }
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
 }

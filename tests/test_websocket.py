@@ -30,6 +30,7 @@ from fleet.models.vehicle import FleetUnit, UnitType
 )
 class FleetWebSocketTests(TransactionTestCase):
     def setUp(self):
+        async_to_sync(get_channel_layer().flush)()
         self.operator = User.objects.create_user('ws-operator', password='test-password')
         self.admin = User.objects.create_user('ws-admin', password='test-password')
         self.admin.profile.role = UserRole.ADMIN
@@ -135,6 +136,46 @@ class FleetWebSocketTests(TransactionTestCase):
                 await communicator.disconnect()
                 self.assertTrue(stopped.is_set())
                 self.assertFalse(get_channel_layer().groups.get('fleet_updates'))
+
+        async_to_sync(scenario)()
+
+    def test_group_add_failure_is_cleaned_and_logged_safely(self):
+        token = str(AccessToken.for_user(self.operator))
+        marker = 'redis://user:sensitive-value@redis.example.test/0'
+
+        async def scenario():
+            layer = get_channel_layer()
+            original_add = layer.group_add
+
+            async def partially_add_then_fail(group, channel):
+                await original_add(group, channel)
+                raise RuntimeError(marker)
+
+            with patch.object(layer, 'group_add', side_effect=partially_add_then_fail):
+                with self.assertLogs(FleetConsumer.__module__, level='ERROR') as logs:
+                    communicator = self.communicator(token)
+                    self.assertEqual(await communicator.connect(), (False, 1011))
+                    await communicator.disconnect()
+            self.assertFalse(layer.groups.get('fleet_updates'))
+            self.assertNotIn(marker, str(logs.output))
+            self.assertIn('Falha ao associar conexão ao grupo de frota.', str(logs.output))
+
+        async_to_sync(scenario)()
+
+    def test_group_discard_failure_does_not_escape_disconnect(self):
+        token = str(AccessToken.for_user(self.operator))
+        marker = 'redis://user:sensitive-value@redis.example.test/0'
+
+        async def scenario():
+            layer = get_channel_layer()
+            communicator = self.communicator(token)
+            self.assertEqual(await communicator.connect(), (True, 'coin.v1'))
+            with patch.object(layer, 'group_discard', side_effect=RuntimeError(marker)):
+                with self.assertLogs(FleetConsumer.__module__, level='ERROR') as logs:
+                    await communicator.disconnect()
+            self.assertNotIn(marker, str(logs.output))
+            self.assertIn('Falha ao remover conexão do grupo de frota.', str(logs.output))
+            await layer.flush()
 
         async_to_sync(scenario)()
 

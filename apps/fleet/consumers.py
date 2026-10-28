@@ -30,9 +30,25 @@ class FleetConsumer(AsyncWebsocketConsumer):
             await self.close(code=4401)
             return
 
-        await self.accept(subprotocol=PROTOCOL)
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
-        self.joined = True
+        try:
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+            self.joined = True
+        except Exception:
+            logger.error('Falha ao associar conexão ao grupo de frota.')
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception:
+                logger.error('Falha ao limpar associação parcial do grupo de frota.')
+            self.joined = False
+            self.closed = True
+            await self.close(code=1011)
+            return
+
+        try:
+            await self.accept(subprotocol=PROTOCOL)
+        except Exception:
+            await self._discard_group_safely()
+            raise
         self.expiry_task = asyncio.create_task(self._expire())
 
     async def _expire(self):
@@ -50,14 +66,18 @@ class FleetConsumer(AsyncWebsocketConsumer):
         task = self.expiry_task
         if task and task is not asyncio.current_task():
             task.cancel()
+        await self._discard_group_safely()
+        await self.close(code=code)
+
+    async def _discard_group_safely(self):
+        if not self.joined:
+            return
         try:
-            if self.joined:
-                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
         except Exception:
             logger.error('Falha ao remover conexão do grupo de frota.')
         finally:
             self.joined = False
-            await self.close(code=code)
 
     async def disconnect(self, close_code):
         task = self.expiry_task
@@ -69,9 +89,7 @@ class FleetConsumer(AsyncWebsocketConsumer):
                 pass
         async with self.lifecycle_lock:
             self.closed = True
-            if self.joined:
-                await self.channel_layer.group_discard(self.group_name, self.channel_name)
-                self.joined = False
+            await self._discard_group_safely()
 
     async def send_fleet_update(self, event):
         async with self.lifecycle_lock:

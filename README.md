@@ -48,11 +48,15 @@ pip install -r requirements.txt
 ```
 
 4. Configure as variáveis de ambiente:
-Crie um arquivo .env na raiz do projeto com a URL do seu banco Neon:
+Copie `.env.example` para `.env` e ajuste os valores locais. O arquivo `.env` não é versionado. Redis é opcional no desenvolvimento; deixe `REDIS_URL` vazia para usar a camada em memória:
 ```bash
 DEBUG=True
 SECRET_KEY=sua-chave-secreta
-DATABASE_URL=postgres://usuario:senha@host.neon.tech/banco?sslmode=require
+DATABASE_URL=postgresql://usuario:senha@host/banco
+ALLOWED_HOSTS=localhost,127.0.0.1
+WEBSOCKET_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+REDIS_URL=
+CHANNEL_LAYER_PREFIX=coin-local
 ```
 
 5. Rode as migrações e inicie o servidor:
@@ -61,6 +65,28 @@ python manage.py makemigrations
 python manage.py migrate
 python manage.py runserver
 ```
+
+### Configurações por ambiente
+
+- `config.settings.base`: configuração comum e camada de canais em memória, sem carregar `.env` automaticamente.
+- `config.settings.local`: usada por padrão pelo `manage.py`; carrega o `.env` local preservando a precedência das variáveis do processo. Se `REDIS_URL` estiver preenchida, usa `channels_redis.core.RedisChannelLayer`; caso contrário, mantém a memória.
+- `config.settings.test`: carrega o `.env` apenas para facilitar o banco local, mas sempre força `InMemoryChannelLayer`, mesmo que `REDIS_URL` exista.
+- `config.settings.production`: nunca carrega `.env`; exige configuração segura pelo ambiente, Redis e prefixo explícitos, e não possui fallback para memória.
+
+Para iniciar o ASGI local, informe explicitamente as settings locais:
+
+```powershell
+$env:DJANGO_SETTINGS_MODULE = "config.settings.local"
+daphne config.asgi:application
+```
+
+Em Linux ou macOS, use `DJANGO_SETTINGS_MODULE=config.settings.local daphne config.asgi:application`. A suíte normal deve ser executada com `python manage.py test --settings=config.settings.test` e não requer Redis real.
+
+Para testar Redis localmente, configure uma `REDIS_URL` válida e mantenha o mesmo `CHANNEL_LAYER_PREFIX` em todos os processos HTTP e ASGI. Use um prefixo diferente para cada ambiente. O navegador continua acessando apenas HTTP e WebSocket; ele nunca se conecta diretamente ao Redis.
+
+Em produção, execute o ASGI com `DJANGO_SETTINGS_MODULE=config.settings.production`. São obrigatórios `SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`, `WEBSOCKET_ALLOWED_ORIGINS`, `REDIS_URL` e `CHANNEL_LAYER_PREFIX`. A origem WebSocket deve ser HTTPS e o acesso do navegador deve usar `wss://`. Quando Redis estiver fora de uma rede privada confiável, use `rediss://` conforme o serviço escolhido. HTTPS, HSTS, redirecionamento e cabeçalhos de proxy devem ser configurados somente depois de validar a infraestrutura real; um proxy confiável deve remover e reconstruir seus próprios cabeçalhos e não deve registrar `Authorization` ou `Sec-WebSocket-Protocol`.
+
+O CI mantém os testes Django em memória e executa, em um job separado, um smoke test com Redis temporário. Esse teste registra um canal em um processo e publica pelo mesmo grupo em outro processo, comprovando que a camada é compartilhada sem depender de PostgreSQL ou Neon.
 
 ## Frontend operacional
 
@@ -84,7 +110,7 @@ O evento de despacho mantém `action`, `unit_id`, `unit_name`, `new_status`, `mi
 {"event_id":"c6127b0a-99fb-48ad-a625-d978e33f9fa3","schema_version":1,"occurred_at":"2026-10-27T12:30:00+00:00","action":"DISPATCH","unit_id":1,"unit_name":"Alfa 01","new_status":"BUSY","mission_id":42,"lat":-9.0,"lon":-35.0}
 ```
 
-A publicação ocorre após o commit e é uma notificação em tempo real sem garantia de entrega. Após reconectar, o cliente deve reconciliar seu estado consultando a API HTTP. A camada em memória é limitada a um processo e não compartilha eventos entre workers.
+A publicação ocorre após o commit e é uma notificação em tempo real sem garantia de entrega, persistência ou replay. Após reconectar, o cliente reconcilia seu estado consultando a API HTTP. A camada em memória é limitada a um processo e não deve ser usada em produção; todos os workers de produção precisam compartilhar o mesmo Redis e o mesmo prefixo.
 
 ## 🤝 Contribuição
 Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou enviar pull requests.
