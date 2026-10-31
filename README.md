@@ -98,6 +98,8 @@ Verificações do frontend: `npm run typecheck`, `npm test` e `npm run build`. O
 
 Os tokens ficam somente em memória: atualizar ou fechar a página exige novo login. O botão Sair limpa a sessão local, mas não revoga o refresh token no servidor. O mapa usa tiles públicos do OpenStreetMap com atribuição; o serviço é limitado e sem garantia de disponibilidade, por isso uma operação em escala precisa avaliar outro provedor ou infraestrutura própria. A localização exibida vem da API; não há rastreamento GPS ao vivo nem telas de cadastro, conclusão ou cancelamento de missões nesta versão.
 
+A área protegida `/missions` lista e filtra missões com paginação, abre detalhes e histórico e separa claramente a criação manual (`/missions/new`) do despacho de emergência (`/missions/dispatch`). Ambos os formulários aceitam coordenadas digitadas ou selecionadas no mapa. A criação manual deixa a missão pendente e sem viatura; somente o despacho cria a missão e atribui uma unidade elegível. Como operações `POST` não possuem chave de idempotência, o frontend não as repete automaticamente quando a resposta da rede é incerta: o operador deve conferir a lista e a frota antes de tentar novamente.
+
 ## WebSocket de atualizações da frota
 
 Configure `WEBSOCKET_ALLOWED_ORIGINS` como uma lista separada por vírgulas de origens HTTP(S) exatas, incluindo a porta quando necessária. O padrão é vazio e recusa todas as origens; em produção configure apenas as origens autorizadas. O exemplo local está em `.env.example`. Origens ausentes são recusadas.

@@ -1,7 +1,27 @@
 import type { Tokens, User } from './types'
 
+export type ApiErrorDetails = Record<string, unknown> | null
+
+function safeValue(value: unknown, depth = 0): unknown {
+  if (depth > 3) return null
+  if (typeof value === 'string') return value.slice(0, 500)
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value
+  if (Array.isArray(value)) return value.slice(0, 20).map(item => safeValue(item, depth + 1))
+  if (typeof value !== 'object') return null
+  return Object.fromEntries(Object.entries(value).slice(0, 30).map(([key, item]) => [key, safeValue(item, depth + 1)]))
+}
+
+function safeDetails(value: unknown): ApiErrorDetails {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return safeValue(value) as Record<string, unknown>
+}
+
 export class ApiError extends Error {
-  constructor(public readonly status: number, message = 'Não foi possível concluir a solicitação.') { super(message) }
+  constructor(
+    public readonly status: number,
+    message = 'Não foi possível concluir a solicitação.',
+    public readonly details: ApiErrorDetails = null,
+  ) { super(message) }
 }
 
 async function parse(response: Response): Promise<unknown> {
@@ -79,7 +99,7 @@ export class ApiClient {
       if (response.status === 401 && generation === this.generation) { this.clear(); this.onSessionLost() }
     }
     const data = await parse(response)
-    if (!response.ok) throw new ApiError(response.status)
+    if (!response.ok) throw new ApiError(response.status, undefined, safeDetails(data))
     return data as T
   }
 }

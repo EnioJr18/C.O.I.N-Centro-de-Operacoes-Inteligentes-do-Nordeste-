@@ -78,6 +78,17 @@ describe('sessão e cliente HTTP', () => {
     client.clear()
     expect(client.getAccess()).toBeNull()
   })
+
+  it('preserva apenas erro JSON estruturado em chamadas protegidas', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(reply({ access: 'a', refresh: 'r' })).mockResolvedValueOnce(reply(user))
+      .mockResolvedValueOnce(reply({ description: ['Campo obrigatório.'], detail: 'Revise os dados.' }, 400))
+      .mockResolvedValueOnce(new Response('<h1>erro interno</h1>', { status: 500, headers: { 'Content-Type': 'text/html' } }))
+    vi.stubGlobal('fetch', fetcher)
+    const client = new ApiClient(vi.fn())
+    await client.login('op@example.com', 'password')
+    await expect(client.request('/api/invalid/')).rejects.toMatchObject({ status: 400, details: { description: ['Campo obrigatório.'], detail: 'Revise os dados.' } })
+    await expect(client.request('/api/failure/')).rejects.toMatchObject({ status: 500, details: null })
+  })
 })
 
 describe('frota', () => {
