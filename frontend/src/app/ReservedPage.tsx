@@ -2,12 +2,11 @@ import { Link } from 'react-router-dom'
 import { OperationalShell } from '../layout/OperationalShell'
 import { Icon } from '../layout/Icon'
 
-type ReservedKind = 'ALERTAS' | 'USUÁRIOS' | 'PERFIL'
+type ReservedKind = 'ALERTAS' | 'USUÁRIOS'
 
 const content: Record<ReservedKind, { icon: 'alerts' | 'users' | 'profile'; title: string; description: string; note: string }> = {
   ALERTAS: { icon: 'alerts', title: 'Central de alertas', description: 'Este módulo reunirá alertas operacionais persistentes em uma sprint futura.', note: 'Nenhuma notificação fictícia é exibida nesta área.' },
   USUÁRIOS: { icon: 'users', title: 'Administração de usuários', description: 'A gestão de usuários e papéis será implementada em uma sprint dedicada.', note: 'O acesso a esta área reservada é restrito a administradores.' },
-  PERFIL: { icon: 'profile', title: 'Perfil do usuário', description: 'A consulta está limitada aos dados da sessão atual. A edição virá em uma sprint futura.', note: 'Nenhum dado pessoal pode ser alterado nesta tela.' },
 }
 
 export function ReservedPage({ kind }: { kind: ReservedKind }) {

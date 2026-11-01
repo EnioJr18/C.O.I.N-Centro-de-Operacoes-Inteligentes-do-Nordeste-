@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ApiClient } from '../api/client'
+import { changeCurrentPassword, updateCurrentUser } from '../api/profile'
+import type { PasswordPayload, ProfilePayload } from '../api/profile'
 import type { User } from '../api/types'
 
-interface AuthContextValue { user: User | null; client: ApiClient; login: (email: string, password: string) => Promise<void>; logout: () => void }
+interface AuthContextValue { user: User | null; client: ApiClient; login: (email: string, password: string) => Promise<void>; logout: () => void; updateProfile: (payload: ProfilePayload) => Promise<User>; changePassword: (payload: PasswordPayload) => Promise<void> }
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -13,7 +15,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const api = client.current
   const logout = useCallback(() => { api.clear(); setUser(null) }, [api])
   const login = useCallback(async (email: string, password: string) => { setUser(await api.login(email, password)) }, [api])
-  return <AuthContext.Provider value={{ user, client: api, login, logout }}>{children}</AuthContext.Provider>
+  const updateProfile = useCallback(async (payload: ProfilePayload) => { const updated = await updateCurrentUser(api, payload); setUser(updated); return updated }, [api])
+  const changePassword = useCallback(async (payload: PasswordPayload) => { await changeCurrentPassword(api, payload) }, [api])
+  return <AuthContext.Provider value={{ user, client: api, login, logout, updateProfile, changePassword }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth(): AuthContextValue {

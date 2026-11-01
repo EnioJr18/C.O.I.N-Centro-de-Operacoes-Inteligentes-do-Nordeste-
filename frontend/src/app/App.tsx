@@ -8,6 +8,7 @@ import { MissionsPage } from '../missions/MissionsPage'
 import { DispatchPage } from '../missions/DispatchPage'
 import { OverviewPage } from '../dashboard/OverviewPage'
 import { ReservedPage } from './ReservedPage'
+import { ProfilePage } from '../profile/ProfilePage'
 import type { ReactNode } from 'react'
 
 function ProtectedPage({ children, adminOnly = false }: { children: ReactNode; adminOnly?: boolean }) {
@@ -27,7 +28,7 @@ export function App() {
     <Route path="/missions/:missionId" element={<ProtectedPage><MissionDetailsPage /></ProtectedPage>} />
     <Route path="/alerts" element={<ProtectedPage><ReservedPage kind="ALERTAS" /></ProtectedPage>} />
     <Route path="/users" element={<ProtectedPage adminOnly><ReservedPage kind="USUÁRIOS" /></ProtectedPage>} />
-    <Route path="/profile" element={<ProtectedPage><ReservedPage kind="PERFIL" /></ProtectedPage>} />
+    <Route path="/profile" element={<ProtectedPage><ProfilePage /></ProtectedPage>} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></BrowserRouter></AuthProvider>
 }

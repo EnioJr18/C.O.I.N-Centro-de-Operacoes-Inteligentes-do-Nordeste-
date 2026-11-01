@@ -100,6 +100,10 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'dispatch.api_exceptions.api_exception_handler',
 }
 
+SIMPLE_JWT = {
+    'CHECK_REVOKE_TOKEN': True,
+}
+
 SPECTACULAR_SETTINGS = {
     'TITLE': 'C.O.I.N. API',
     'DESCRIPTION': 'API REST do Centro de Operações Inteligentes.',

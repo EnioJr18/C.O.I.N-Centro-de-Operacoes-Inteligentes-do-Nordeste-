@@ -14,13 +14,14 @@ vi.mock('../missions/MissionFormPage', () => ({ MissionFormPage: () => <h1>Nova 
 vi.mock('../missions/MissionDetailsPage', () => ({ MissionDetailsPage: () => <h1>Detalhes</h1> }))
 vi.mock('../missions/DispatchPage', () => ({ DispatchPage: () => <h1>Despacho</h1> }))
 vi.mock('../app/ReservedPage', () => ({ ReservedPage: ({ kind }: { kind: string }) => <h1>{kind}</h1> }))
+vi.mock('../profile/ProfilePage', () => ({ ProfilePage: () => <h1>Perfil</h1> }))
 
 beforeEach(() => { mocks.role = 'OPERADOR'; window.history.replaceState({}, '', '/') })
 
 describe('organização das rotas', () => {
   it.each([
     ['/', 'Resumo'], ['/fleet', 'Frota'], ['/missions', 'Missões'], ['/missions/new', 'Nova missão'],
-    ['/missions/12', 'Detalhes'], ['/missions/dispatch', 'Despacho'], ['/alerts', 'ALERTAS'], ['/profile', 'PERFIL'],
+    ['/missions/12', 'Detalhes'], ['/missions/dispatch', 'Despacho'], ['/alerts', 'ALERTAS'], ['/profile', 'Perfil'],
   ])('resolve %s para seu módulo', (path, title) => {
     window.history.replaceState({}, '', path)
     render(<App />)

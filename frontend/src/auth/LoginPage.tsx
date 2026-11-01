@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useAuth } from './AuthContext'
 
 export function LoginPage() {
   const { login, user } = useAuth()
+  const location = useLocation()
+  const passwordChanged = !!(location.state && typeof location.state === 'object' && 'passwordChanged' in location.state && location.state.passwordChanged)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [pending, setPending] = useState(false)
@@ -25,7 +27,7 @@ export function LoginPage() {
       <section className="login-card"><div className="card-topline"><span>ACESSO RESTRITO</span><span>01 / 01</span></div><h2>Bem-vindo de volta</h2><p>Entre com suas credenciais para acessar o centro de operações.</p><form onSubmit={submit}>
         <label htmlFor="email">E-mail</label><input id="email" type="email" autoComplete="username" placeholder="seu@email.com" value={email} onChange={e => setEmail(e.target.value)} required />
         <label htmlFor="password">Senha</label><input id="password" type="password" autoComplete="current-password" placeholder="Sua senha" value={password} onChange={e => setPassword(e.target.value)} required />
-        {error && <p role="alert" className="error-text">{error}</p>}
+        {passwordChanged && <p role="status" className="login-success">Senha alterada com sucesso. Entre novamente.</p>}{error && <p role="alert" className="error-text">{error}</p>}
         <button className="primary-button" type="submit" disabled={pending}>{pending ? 'Entrando...' : 'Acessar operações'} <span aria-hidden="true">↗</span></button>
       </form><p className="login-note">A sessão é encerrada ao atualizar ou fechar esta página.</p></section>
     </div><footer className="login-footer">C.O.I.N. <span>INFORMAÇÃO PARA QUEM ESTÁ EM CAMPO</span></footer>

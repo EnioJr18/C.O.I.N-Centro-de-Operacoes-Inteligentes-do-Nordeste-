@@ -61,7 +61,6 @@ describe('módulos reservados', () => {
   it.each([
     ['ALERTAS', 'Central de alertas'],
     ['USUÁRIOS', 'Administração de usuários'],
-    ['PERFIL', 'Perfil do usuário'],
   ] as const)('identifica %s como módulo em preparação sem ação fictícia', (kind, title) => {
     render(<MemoryRouter><ReservedPage kind={kind} /></MemoryRouter>)
     expect(screen.getByRole('heading', { name: `${title}.` })).toBeInTheDocument()

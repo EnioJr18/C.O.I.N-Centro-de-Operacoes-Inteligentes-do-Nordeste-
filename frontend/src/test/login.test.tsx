@@ -1,6 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { App } from '../app/App'
+import { AuthProvider } from '../auth/AuthContext'
+import { LoginPage } from '../auth/LoginPage'
 
 vi.mock('../dashboard/OverviewPage', async () => {
   const { useAuth } = await import('../auth/AuthContext')
@@ -33,5 +36,11 @@ describe('entrada na área operacional', () => {
     fireEvent.click(screen.getByRole('button', { name: /Acessar operações/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('E-mail ou senha inválidos')
     expect(screen.queryByText('Visão geral operacional')).not.toBeInTheDocument()
+  })
+
+  it('informa a reautenticação após troca de senha sem expor credenciais', () => {
+    render(<AuthProvider><MemoryRouter initialEntries={[{ pathname: '/login', state: { passwordChanged: true } }]}><LoginPage /></MemoryRouter></AuthProvider>)
+    expect(screen.getByRole('status')).toHaveTextContent('Senha alterada com sucesso. Entre novamente.')
+    expect(screen.queryByText(/senha atual|nova senha/i)).not.toBeInTheDocument()
   })
 })
