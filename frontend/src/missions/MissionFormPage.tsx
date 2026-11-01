@@ -27,7 +27,7 @@ export function MissionFormPage() {
     } finally { sending.current = false; setSubmitting(false) }
   }
 
-  return <OperationalShell section="MISSÕES"><main className="content form-content"><div className="back-line"><Link to="/missions">← Voltar para missões</Link></div><div className="page-heading"><div><p className="eyebrow">MISSÕES <span> / </span> NOVA MISSÃO</p><h1>Registrar missão<span>.</span></h1><p>Cria uma missão pendente, sem atribuir uma viatura.</p></div></div>
+  return <OperationalShell section="MISSÕES"><main id="main-content" className="content form-content" tabIndex={-1}><div className="back-line"><Link to="/missions">← Voltar para missões</Link></div><div className="page-heading"><div><p className="eyebrow">MISSÕES <span> / </span> NOVA MISSÃO</p><h1>Registrar missão<span>.</span></h1><p>Cria uma missão pendente, sem atribuir uma viatura.</p></div></div>
     <form className="mission-form" onSubmit={submit}><div className="form-section"><label>Descrição da ocorrência<textarea value={description} aria-invalid={!!errors.description} onChange={event => setDescription(event.target.value)} rows={4} />{errors.description && <span className="field-error">{errors.description}</span>}</label></div>
       <div className="form-section"><h2>Localização</h2><LocationPicker latitude={latitude} longitude={longitude} errors={errors} onChange={(lat, lon) => { setLatitude(lat); setLongitude(lon) }} /></div>
       {message && <div className="form-message" role="alert">{message}</div>}<div className="form-actions"><Link className="secondary-action" to="/missions">Cancelar</Link><button className="primary-action" disabled={submitting} type="submit">{submitting ? 'Salvando...' : 'Criar missão'}</button></div>

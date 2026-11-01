@@ -49,7 +49,7 @@ export function MissionsPage() {
     setFilterError(''); setPage(1); setFilters({ status: status || undefined, createdAfter: after, createdBefore: before })
   }
 
-  return <OperationalShell section="MISSÕES"><main className="content">
+  return <OperationalShell section="MISSÕES"><main id="main-content" className="content" tabIndex={-1}>
     <div className="page-heading"><div><p className="eyebrow">CENTRAL DE MONITORAMENTO <span> / </span> MISSÕES</p><h1>Missões operacionais<span>.</span></h1><p>Consulte ocorrências, histórico e operações de despacho.</p></div><div className="page-actions"><Link className="secondary-action" to="/missions/new">Nova missão</Link><Link className="primary-action" to="/missions/dispatch">Despachar emergência</Link></div></div>
     <form className="mission-filters" onSubmit={applyFilters}><label>Status<select value={status} onChange={event => setStatus(event.target.value as MissionStatus | '')}><option value="">Todos</option>{statuses.map(item => <option key={item}>{item}</option>)}</select></label>
       <label>Criadas a partir de<input type="datetime-local" value={createdAfter} onChange={event => setCreatedAfter(event.target.value)} /></label>

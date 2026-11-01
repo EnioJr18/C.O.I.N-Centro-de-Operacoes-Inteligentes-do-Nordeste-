@@ -40,7 +40,7 @@ export function MissionDetailsPage() {
   useEffect(() => { const controller = new AbortController(); void loadMission(controller.signal); return () => { controller.abort(); sequence.current++ } }, [loadMission])
   useEffect(() => { const controller = new AbortController(); void loadHistory(controller.signal); return () => controller.abort() }, [loadHistory])
 
-  return <OperationalShell section="MISSÕES"><main className="content narrow-content"><div className="back-line"><Link to="/missions">← Voltar para missões</Link></div>
+  return <OperationalShell section="MISSÕES"><main id="main-content" className="content narrow-content" tabIndex={-1}><div className="back-line"><Link to="/missions">← Voltar para missões</Link></div>
     {loading && <div className="empty-state" role="status">Carregando missão...</div>}
     {error && !loading && <div className="error-banner" role="alert"><span>{error}</span>{id && <button onClick={() => void loadMission()}>Tentar novamente ↻</button>}</div>}
     {mission && !loading && <><div className="page-heading"><div><p className="eyebrow">MISSÃO <span> / </span> #{mission.id}</p><h1>Detalhes da missão<span>.</span></h1><p>{mission.description}</p></div><span className="mission-status detail-status">{mission.status}</span></div>

@@ -50,8 +50,8 @@ export function OperationsPage() {
   }, [client, logout, reload])
 
   const active = units.find(unit => unit.id === selected)
-  return <OperationalShell section="VISÃO GERAL" connection={connection}>
-    <main className="content"><div className="page-heading"><div><p className="eyebrow">CENTRAL DE MONITORAMENTO <span> / </span> FROTA</p><h1>Visão operacional<span>.</span></h1><p>Disponibilidade e localização das unidades em campo.</p></div><div className="heading-meta"><span className="meta-dot" /> MONITORAMENTO EM TEMPO REAL</div></div>
+  return <OperationalShell section="FROTA" connection={connection}>
+    <main id="main-content" className="content" tabIndex={-1}><div className="page-heading"><div><p className="eyebrow">CENTRAL DE MONITORAMENTO <span> / </span> FROTA</p><h1>Frota operacional<span>.</span></h1><p>Disponibilidade e localização das unidades em campo.</p></div><div className="heading-meta"><span className="meta-dot" /> MONITORAMENTO EM TEMPO REAL</div></div>
         <section className="summary" aria-label="Resumo da frota"><div className="summary-intro"><span className="summary-icon">◉</span><div><small>FROTA MONITORADA</small><strong>{loaded.current ? units.length.toString().padStart(2, '0') : '—'}</strong></div></div>{(['AVAILABLE', 'BUSY', 'MAINTENANCE'] as const).map(status => <div className="summary-item" key={status}><span className={`status-indicator ${status.toLowerCase()}`} /><div><small>{labels[status].toUpperCase()}</small><strong>{loaded.current ? units.filter(u => u.status === status).length.toString().padStart(2, '0') : '—'}</strong></div></div>)}<span className="summary-note">Dados da frota<br />atualizados pela API</span></section>
         {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => void reload()}>Tentar novamente ↻</button></div>}
         <div className="workspace"><section className="map-panel"><div className="panel-heading"><div><p className="eyebrow">VISUALIZAÇÃO GEOGRÁFICA</p><h2>Mapa da frota</h2></div><span className="panel-meta">◉ {loaded.current ? units.filter(u => validCoordinates(u.current_location)).length : '—'} COM LOCALIZAÇÃO</span></div>
