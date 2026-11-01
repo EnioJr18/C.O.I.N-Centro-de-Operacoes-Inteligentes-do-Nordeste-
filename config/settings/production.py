@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -34,6 +35,53 @@ if DEBUG:
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+
+SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=False)
+SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool(
+    'SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False
+)
+SECURE_HSTS_PRELOAD = env.bool('SECURE_HSTS_PRELOAD', default=False)
+if SECURE_HSTS_SECONDS < 0:
+    raise ImproperlyConfigured('SECURE_HSTS_SECONDS não pode ser negativo.')
+if SECURE_HSTS_PRELOAD and (
+    SECURE_HSTS_SECONDS == 0 or not SECURE_HSTS_INCLUDE_SUBDOMAINS
+):
+    raise ImproperlyConfigured(
+        'HSTS preload exige HSTS ativo e inclusão explícita de subdomínios.'
+    )
+
+TRUST_X_FORWARDED_PROTO = env.bool('TRUST_X_FORWARDED_PROTO', default=False)
+if TRUST_X_FORWARDED_PROTO:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
+for origin in CSRF_TRUSTED_ORIGINS:
+    parsed = urlsplit(origin)
+    if (
+        parsed.scheme != 'https'
+        or not parsed.hostname
+        or '*' in origin
+        or parsed.username
+        or parsed.password
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ImproperlyConfigured(
+            'CSRF_TRUSTED_ORIGINS deve conter apenas origens HTTPS explícitas.'
+        )
+
+OPENAPI_ENABLED = env.bool('OPENAPI_ENABLED', default=False)
+
+DATABASE_CONNECT_TIMEOUT = env.int('DATABASE_CONNECT_TIMEOUT', default=5)
+if not 1 <= DATABASE_CONNECT_TIMEOUT <= 60:
+    raise ImproperlyConfigured('DATABASE_CONNECT_TIMEOUT deve estar entre 1 e 60 segundos.')
+DATABASES['default'].setdefault('OPTIONS', {})
+DATABASES['default']['OPTIONS'].setdefault('connect_timeout', DATABASE_CONNECT_TIMEOUT)
+DATABASES['default']['CONN_HEALTH_CHECKS'] = True
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')
 if not ALLOWED_HOSTS or any(
@@ -59,3 +107,6 @@ CHANNEL_LAYER_PREFIX = validate_channel_layer_prefix(
     required=True,
 )
 CHANNEL_LAYERS = redis_channel_layer(PRODUCTION_REDIS_URL, CHANNEL_LAYER_PREFIX)
+
+LOGGING['formatters']['structured'] = {'()': 'common.logging.JSONFormatter'}
+LOGGING['handlers']['console']['formatter'] = 'structured'

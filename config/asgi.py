@@ -1,7 +1,11 @@
 import os
-from django.core.asgi import get_asgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.base')
+if not os.environ.get('DJANGO_SETTINGS_MODULE', '').strip():
+    raise RuntimeError(
+        'DJANGO_SETTINGS_MODULE deve ser definido explicitamente antes de iniciar o ASGI.'
+    )
+
+from django.core.asgi import get_asgi_application
 
 django_asgi_app = get_asgi_application()
 

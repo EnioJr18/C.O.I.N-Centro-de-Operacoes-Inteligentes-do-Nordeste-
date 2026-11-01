@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -44,6 +45,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'common.middleware.RequestIDMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -81,7 +83,12 @@ TIME_ZONE = 'America/Maceio'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = Path(env('STATIC_ROOT', default=str(BASE_DIR / 'staticfiles')))
+OPENAPI_ENABLED = True
+HEALTHCHECK_TIMEOUT_MS = env.int('HEALTHCHECK_TIMEOUT_MS', default=2000)
+if not 100 <= HEALTHCHECK_TIMEOUT_MS <= 10000:
+    raise ImproperlyConfigured('HEALTHCHECK_TIMEOUT_MS deve estar entre 100 e 10000 ms.')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_PASSWORD_VALIDATORS = [{'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'}]
 REST_FRAMEWORK = {
@@ -115,5 +122,29 @@ if os.name == 'nt':
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'safe_context': {'()': 'common.logging.SafeLogFilter'},
+    },
+    'formatters': {
+        'local': {
+            'format': '%(asctime)s %(levelname)s %(name)s [request_id=%(request_id)s] %(message)s',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'filters': ['safe_context'],
+            'formatter': 'local',
+        },
+    },
+    'root': {'handlers': ['console'], 'level': 'INFO'},
+    'loggers': {
+        'django': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
     },
 }

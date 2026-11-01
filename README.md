@@ -86,6 +86,10 @@ Para testar Redis localmente, configure uma `REDIS_URL` válida e mantenha o mes
 
 Em produção, execute o ASGI com `DJANGO_SETTINGS_MODULE=config.settings.production`. São obrigatórios `SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`, `WEBSOCKET_ALLOWED_ORIGINS`, `REDIS_URL` e `CHANNEL_LAYER_PREFIX`. A origem WebSocket deve ser HTTPS e o acesso do navegador deve usar `wss://`. Quando Redis estiver fora de uma rede privada confiável, use `rediss://` conforme o serviço escolhido. HTTPS, HSTS, redirecionamento e cabeçalhos de proxy devem ser configurados somente depois de validar a infraestrutura real; um proxy confiável deve remover e reconstruir seus próprios cabeçalhos e não deve registrar `Authorization` ou `Sec-WebSocket-Protocol`.
 
+Os entrypoints ASGI e WSGI não escolhem settings automaticamente: `DJANGO_SETTINGS_MODULE` precisa existir antes da importação. O serviço operacional completo usa ASGI; WSGI atende somente HTTP. A configuração de produção desativa OpenAPI por padrão, mantém HSTS e redirecionamento HTTPS conservadores até a definição do proxy e aceita `TRUST_X_FORWARDED_PROTO=True` somente quando um proxy confiável remove e reconstrói `X-Forwarded-Proto`. Consulte [o runbook de produção](docs/production-runbook.md) antes de preparar um ambiente público.
+
+Os endpoints `/health/live/`, `/health/ready/` e `/health/realtime/` verificam, respectivamente, processo HTTP, PostgreSQL/PostGIS e channel layer. As respostas são genéricas; a falha do tempo real não remove automaticamente a API REST da readiness principal.
+
 O CI mantém os testes Django em memória e executa, em um job separado, um smoke test com Redis temporário. Esse teste registra um canal em um processo e publica pelo mesmo grupo em outro processo, comprovando que a camada é compartilhada sem depender de PostgreSQL ou Neon.
 
 ## Frontend operacional
@@ -99,6 +103,8 @@ Verificações do frontend: `npm run typecheck`, `npm test` e `npm run build`. O
 Os tokens ficam somente em memória: atualizar ou fechar a página exige novo login. O botão Sair limpa a sessão local, mas não revoga o refresh token no servidor. O mapa usa tiles públicos do OpenStreetMap com atribuição; o serviço é limitado e sem garantia de disponibilidade, por isso uma operação em escala precisa avaliar outro provedor ou infraestrutura própria. A localização exibida vem da API; não há rastreamento GPS ao vivo nem telas de cadastro, conclusão ou cancelamento de missões nesta versão.
 
 A área protegida `/missions` lista e filtra missões com paginação, abre detalhes e histórico e separa claramente a criação manual (`/missions/new`) do despacho de emergência (`/missions/dispatch`). Ambos os formulários aceitam coordenadas digitadas ou selecionadas no mapa. A criação manual deixa a missão pendente e sem viatura; somente o despacho cria a missão e atribui uma unidade elegível. Como operações `POST` não possuem chave de idempotência, o frontend não as repete automaticamente quando a resposta da rede é incerta: o operador deve conferir a lista e a frota antes de tentar novamente.
+
+`collectstatic` produz os arquivos do Django Admin em `STATIC_ROOT`; `npm run build` produz a SPA separadamente em `frontend/dist`. Em uma futura publicação de mesma origem, o roteamento deve priorizar `/api/`, `/ws/`, `/admin/` e `/static/`, usando o `index.html` da SPA como fallback somente para as demais rotas. Google Fonts e os tiles do OpenStreetMap são origens externas que precisam ser consideradas em uma futura CSP.
 
 ## WebSocket de atualizações da frota
 

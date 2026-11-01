@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import json
 from pathlib import Path
 from unittest import TestCase
 
@@ -10,6 +11,36 @@ SETTINGS_SCRIPT = (
     "import importlib, os; "
     "module = importlib.import_module(os.environ['COIN_SETTINGS_UNDER_TEST']); "
     "print(module.CHANNEL_LAYERS['default']['BACKEND'])"
+)
+ENTRYPOINT_SCRIPT = (
+    "import importlib, os; "
+    "module = importlib.import_module(os.environ['COIN_ENTRYPOINT_UNDER_TEST']); "
+    "print(type(module.application).__name__, flush=True); "
+    "os._exit(0)"
+)
+PRODUCTION_SECURITY_SCRIPT = (
+    "import json, os; "
+    "from config.settings import production as settings; "
+    "print(json.dumps({"
+    "'debug': settings.DEBUG, "
+    "'openapi': settings.OPENAPI_ENABLED, "
+    "'ssl_redirect': settings.SECURE_SSL_REDIRECT, "
+    "'hsts': settings.SECURE_HSTS_SECONDS, "
+    "'hsts_subdomains': settings.SECURE_HSTS_INCLUDE_SUBDOMAINS, "
+    "'hsts_preload': settings.SECURE_HSTS_PRELOAD, "
+    "'proxy_header': getattr(settings, 'SECURE_PROXY_SSL_HEADER', None), "
+    "'csrf_origins': settings.CSRF_TRUSTED_ORIGINS, "
+    "'connect_timeout': settings.DATABASES['default']['OPTIONS']['connect_timeout'], "
+    "'conn_health_checks': settings.DATABASES['default']['CONN_HEALTH_CHECKS'], "
+    "'static_url': settings.STATIC_URL"
+    "}))"
+)
+PRODUCTION_URLS_SCRIPT = (
+    "import django; django.setup(); "
+    "from django.urls import get_resolver; "
+    "names = {pattern.name for pattern in get_resolver().url_patterns "
+    "if getattr(pattern, 'name', None)}; "
+    "print(','.join(sorted(names)))"
 )
 PRODUCTION_ENV = {
     'SECRET_KEY': 'test-only-production-key-with-more-than-fifty-characters-ABC123xyz',
@@ -146,3 +177,139 @@ class SettingsSelectionTests(TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), 'channels_redis.core.RedisChannelLayer')
+
+    def test_entrypoints_fail_closed_without_explicit_settings(self):
+        for module in ('config.asgi', 'config.wsgi'):
+            with self.subTest(module=module):
+                result = subprocess.run(
+                    [sys.executable, '-c', ENTRYPOINT_SCRIPT],
+                    cwd=BASE_DIR,
+                    env={
+                        key: value for key, value in os.environ.items()
+                        if key != 'DJANGO_SETTINGS_MODULE'
+                    } | {'COIN_ENTRYPOINT_UNDER_TEST': module},
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('DJANGO_SETTINGS_MODULE deve ser definido explicitamente', result.stderr)
+                self.assertNotIn('config.settings.local', result.stdout + result.stderr)
+                self.assertNotIn('config.settings.base', result.stdout + result.stderr)
+
+    def test_entrypoints_start_with_explicit_test_settings_without_external_connections(self):
+        for module in ('config.asgi', 'config.wsgi'):
+            with self.subTest(module=module):
+                result = subprocess.run(
+                    [sys.executable, '-c', ENTRYPOINT_SCRIPT],
+                    cwd=BASE_DIR,
+                    env={
+                        **os.environ,
+                        'COIN_ENTRYPOINT_UNDER_TEST': module,
+                        'DJANGO_SETTINGS_MODULE': 'config.settings.test',
+                        'SECRET_KEY': 'entrypoint-test-key',
+                        'DATABASE_URL': 'postgresql://test:test@127.0.0.1:1/never-connected',
+                    },
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_production_security_defaults_are_explicit_and_conservative(self):
+        result = subprocess.run(
+            [sys.executable, '-c', PRODUCTION_SECURITY_SCRIPT],
+            cwd=BASE_DIR,
+            env={**os.environ, **PRODUCTION_ENV},
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        values = json.loads(result.stdout)
+        self.assertEqual(
+            values,
+            {
+                'debug': False,
+                'openapi': False,
+                'ssl_redirect': False,
+                'hsts': 0,
+                'hsts_subdomains': False,
+                'hsts_preload': False,
+                'proxy_header': None,
+                'csrf_origins': [],
+                'connect_timeout': 5,
+                'conn_health_checks': True,
+                'static_url': '/static/',
+            },
+        )
+
+    def test_production_security_can_be_enabled_only_explicitly(self):
+        result = subprocess.run(
+            [sys.executable, '-c', PRODUCTION_SECURITY_SCRIPT],
+            cwd=BASE_DIR,
+            env={
+                **os.environ,
+                **PRODUCTION_ENV,
+                'SECURE_SSL_REDIRECT': 'True',
+                'SECURE_HSTS_SECONDS': '300',
+                'SECURE_HSTS_INCLUDE_SUBDOMAINS': 'True',
+                'TRUST_X_FORWARDED_PROTO': 'True',
+                'CSRF_TRUSTED_ORIGINS': 'https://app.example.test',
+                'DATABASE_CONNECT_TIMEOUT': '7',
+            },
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        values = json.loads(result.stdout)
+        self.assertTrue(values['ssl_redirect'])
+        self.assertEqual(values['hsts'], 300)
+        self.assertTrue(values['hsts_subdomains'])
+        self.assertFalse(values['hsts_preload'])
+        self.assertEqual(values['proxy_header'], ['HTTP_X_FORWARDED_PROTO', 'https'])
+        self.assertEqual(values['csrf_origins'], ['https://app.example.test'])
+        self.assertEqual(values['connect_timeout'], 7)
+
+    def test_production_rejects_unsafe_http_security_combinations(self):
+        cases = (
+            ({'SECURE_HSTS_SECONDS': '-1'}, 'SECURE_HSTS_SECONDS não pode ser negativo'),
+            ({'SECURE_HSTS_PRELOAD': 'True'}, 'HSTS preload exige HSTS ativo'),
+            ({'CSRF_TRUSTED_ORIGINS': 'http://app.example.test'}, 'CSRF_TRUSTED_ORIGINS'),
+            ({'DATABASE_CONNECT_TIMEOUT': '0'}, 'DATABASE_CONNECT_TIMEOUT'),
+        )
+        for values, message in cases:
+            with self.subTest(values=values):
+                result = self.run_settings(
+                    'config.settings.production', values={**PRODUCTION_ENV, **values}
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+
+    def test_openapi_is_disabled_by_default_and_requires_explicit_opt_in(self):
+        for enabled, expected in (('False', False), ('True', True)):
+            with self.subTest(enabled=enabled):
+                result = subprocess.run(
+                    [sys.executable, '-c', PRODUCTION_URLS_SCRIPT],
+                    cwd=BASE_DIR,
+                    env={
+                        **os.environ,
+                        **PRODUCTION_ENV,
+                        'DJANGO_SETTINGS_MODULE': 'config.settings.production',
+                        'OPENAPI_ENABLED': enabled,
+                    },
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                names = set(result.stdout.strip().split(','))
+                self.assertEqual('schema' in names, expected)
+                self.assertEqual('swagger-ui' in names, expected)
+                self.assertEqual('redoc' in names, expected)

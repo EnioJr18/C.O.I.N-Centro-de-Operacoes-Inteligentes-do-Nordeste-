@@ -36,6 +36,11 @@ jobs:
         run: npm test
       - name: Build frontend
         run: npm run build
+      - name: Verify frontend artifact
+        run: |
+          test -f dist/index.html
+          test -n "$(find dist/assets -type f -print -quit)"
+          ! grep -R -E "SECRET_KEY|DATABASE_URL|REDIS_URL|COIN_BACKEND_ORIGIN" dist
 
   test:
     runs-on: ubuntu-latest
@@ -96,6 +101,48 @@ jobs:
 
       - name: Check Django configuration
         run: python manage.py check
+
+      - name: Validate production configuration
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.production
+          SECRET_KEY: production-check-only-key-with-more-than-fifty-characters-ABC123xyz
+          DATABASE_URL: postgresql://coin_ci:coin_ci@localhost:5432/coin_ci
+          REDIS_URL: rediss://redis.example.invalid:6380/0
+          CHANNEL_LAYER_PREFIX: coin-ci-production
+          ALLOWED_HOSTS: api.example.invalid
+          WEBSOCKET_ALLOWED_ORIGINS: https://app.example.invalid
+          STATIC_ROOT: ${{ runner.temp }}/coin-staticfiles
+        run: |
+          python manage.py check --deploy --settings=config.settings.production
+          python scripts/check_deploy_warnings.py
+
+      - name: Collect Django static files
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.production
+          SECRET_KEY: production-check-only-key-with-more-than-fifty-characters-ABC123xyz
+          DATABASE_URL: postgresql://coin_ci:coin_ci@localhost:5432/coin_ci
+          REDIS_URL: rediss://redis.example.invalid:6380/0
+          CHANNEL_LAYER_PREFIX: coin-ci-production
+          ALLOWED_HOSTS: api.example.invalid
+          WEBSOCKET_ALLOWED_ORIGINS: https://app.example.invalid
+          STATIC_ROOT: ${{ runner.temp }}/coin-staticfiles
+        run: |
+          python manage.py collectstatic --noinput --settings=config.settings.production
+          test -f "$STATIC_ROOT/admin/css/base.css"
+
+      - name: Smoke test production ASGI
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.production
+          SECRET_KEY: production-check-only-key-with-more-than-fifty-characters-ABC123xyz
+          DATABASE_URL: postgresql://coin_ci:coin_ci@localhost:5432/coin_ci
+          REDIS_URL: rediss://redis.example.invalid:6380/0
+          CHANNEL_LAYER_PREFIX: coin-ci-production
+          ALLOWED_HOSTS: api.example.invalid
+          WEBSOCKET_ALLOWED_ORIGINS: https://app.example.invalid
+        run: >-
+          python -c "import config.asgi; from django.conf import settings;
+          assert settings.CHANNEL_LAYERS['default']['BACKEND'] == 'channels_redis.core.RedisChannelLayer';
+          assert config.asgi.application is not None"
 
       - name: Check migrations
         run: python manage.py makemigrations --check --dry-run
