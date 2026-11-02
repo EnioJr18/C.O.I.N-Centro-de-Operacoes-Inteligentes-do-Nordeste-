@@ -15,6 +15,7 @@ vi.mock('../missions/MissionDetailsPage', () => ({ MissionDetailsPage: () => <h1
 vi.mock('../missions/DispatchPage', () => ({ DispatchPage: () => <h1>Despacho</h1> }))
 vi.mock('../app/ReservedPage', () => ({ ReservedPage: ({ kind }: { kind: string }) => <h1>{kind}</h1> }))
 vi.mock('../profile/ProfilePage', () => ({ ProfilePage: () => <h1>Perfil</h1> }))
+vi.mock('../users/UsersPage', () => ({ UsersPage: () => <h1>Usuários</h1> }))
 
 beforeEach(() => { mocks.role = 'OPERADOR'; window.history.replaceState({}, '', '/') })
 
@@ -33,6 +34,6 @@ describe('organização das rotas', () => {
     const view = render(<App />)
     expect(screen.getByRole('heading', { name: 'Resumo' })).toBeInTheDocument()
     mocks.role = 'ADMIN'; window.history.replaceState({}, '', '/users'); view.unmount(); render(<App />)
-    expect(screen.getByRole('heading', { name: 'USUÁRIOS' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Usuários' })).toBeInTheDocument()
   })
 })

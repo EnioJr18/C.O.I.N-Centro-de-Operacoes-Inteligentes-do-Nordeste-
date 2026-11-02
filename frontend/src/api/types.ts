@@ -4,6 +4,7 @@ export type UnitType = 'USB' | 'USA' | 'UR'
 export type MissionStatus = 'Pendente' | 'Em Andamento' | 'Concluída' | 'Cancelada'
 export interface Coordinates { latitude: number; longitude: number }
 export interface User { id: number; username: string; first_name: string; last_name: string; email: string; is_active: boolean; role: Role }
+export interface ManagedUser extends User { is_superuser: boolean; date_joined: string }
 export interface Tokens { access: string; refresh: string }
 export interface FleetUnit {
   id: number; name: string; license_plate: string; unit_type: UnitType

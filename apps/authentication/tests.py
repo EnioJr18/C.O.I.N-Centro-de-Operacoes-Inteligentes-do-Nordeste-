@@ -31,7 +31,7 @@ class AuthenticationTestCase(TestCase):
         admin = User.objects.create_superuser('admin', 'admin@example.com', 'StrongPassword123')
         self.client.force_authenticate(admin)
         self.assertEqual(self.client.get('/api/v1/auth/users/').status_code, 200)
-        response = self.client.post('/api/v1/auth/users/', {'username': 'newop', 'email': 'newop@example.com', 'password': 'StrongPassword123', 'is_superuser': True, 'is_staff': True, 'role': 'ADMIN'}, format='json')
+        response = self.client.post('/api/v1/auth/users/', {'username': 'newop', 'email': 'newop@example.com', 'password': 'StrongPassword123'}, format='json')
         self.assertEqual(response.status_code, 201)
         created = User.objects.get(username='newop')
         self.assertFalse(created.is_superuser)

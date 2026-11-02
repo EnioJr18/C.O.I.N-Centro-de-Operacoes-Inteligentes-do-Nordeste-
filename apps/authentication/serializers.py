@@ -1,10 +1,14 @@
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models.functions import Lower, Trim
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from .models import UserRole
 from .permissions import user_role
+from .selectors import ORDERING_FIELDS
+from .services import create_operational_user
 
 User = get_user_model()
 
@@ -31,6 +35,21 @@ class CurrentUserSerializer(serializers.ModelSerializer):
         model = User
         fields = ('id', 'username', 'first_name', 'last_name', 'email', 'is_active', 'role')
         read_only_fields = fields
+    def get_role(self, user) -> str | None:
+        return user_role(user)
+
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = (
+            'id', 'username', 'first_name', 'last_name', 'email', 'role',
+            'is_active', 'is_superuser', 'date_joined',
+        )
+        read_only_fields = fields
+
     def get_role(self, user) -> str | None:
         return user_role(user)
 
@@ -97,13 +116,72 @@ class PasswordChangeSerializer(ExplicitFieldsSerializerMixin, serializers.Serial
 
 
 class OperationalUserCreateSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
+    allowed_input_fields = frozenset(('username', 'email', 'first_name', 'last_name', 'password'))
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+    email = serializers.EmailField(required=True, allow_blank=False)
+
     class Meta:
         model = User
         fields = ('username', 'email', 'first_name', 'last_name', 'password')
-    def validate_password(self, value):
-        validate_password(value)
-        return value
+
+    def validate(self, attrs):
+        submitted = set(self.initial_data)
+        unexpected = sorted(submitted - self.allowed_input_fields)
+        if unexpected:
+            raise serializers.ValidationError({
+                'non_field_errors': [f"Campos não permitidos: {', '.join(unexpected)}."],
+            })
+        attrs['email'] = attrs['email'].strip().lower()
+        duplicate = User.objects.annotate(
+            normalized_email=Lower(Trim('email')),
+        ).filter(normalized_email=attrs['email']).exists()
+        if duplicate:
+            raise serializers.ValidationError({'email': ['Já existe um usuário com este e-mail.']})
+        candidate = User(
+            username=attrs.get('username', ''),
+            email=attrs['email'],
+            first_name=attrs.get('first_name', ''),
+            last_name=attrs.get('last_name', ''),
+        )
+        try:
+            validate_password(attrs['password'], user=candidate)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError({'password': list(error.messages)}) from error
+        return attrs
+
     def create(self, validated_data):
-        password = validated_data.pop('password')
-        return User.objects.create_user(password=password, **validated_data)
+        request = self.context['request']
+        return create_operational_user(
+            actor=request.user,
+            request_id=request.request_id,
+            **validated_data,
+        )
+
+
+class AdminUserUpdateSerializer(ExplicitFieldsSerializerMixin, serializers.Serializer):
+    allowed_input_fields = frozenset(('first_name', 'last_name'))
+    first_name = serializers.CharField(required=False, allow_blank=True, trim_whitespace=True, max_length=150)
+    last_name = serializers.CharField(required=False, allow_blank=True, trim_whitespace=True, max_length=150)
+
+
+class AdminUserRoleSerializer(ExplicitFieldsSerializerMixin, serializers.Serializer):
+    allowed_input_fields = frozenset(('role',))
+    role = serializers.ChoiceField(choices=UserRole.choices)
+
+
+class UserListFilterSerializer(ExplicitFieldsSerializerMixin, serializers.Serializer):
+    allowed_input_fields = frozenset(('page', 'search', 'role', 'is_active', 'ordering'))
+    page = serializers.IntegerField(required=False, min_value=1)
+    search = serializers.CharField(required=False, allow_blank=True, trim_whitespace=True, max_length=150)
+    role = serializers.ChoiceField(required=False, choices=UserRole.choices)
+    is_active = serializers.BooleanField(required=False)
+    ordering = serializers.ChoiceField(required=False, choices=tuple(ORDERING_FIELDS))
+
+    def validate(self, attrs):
+        submitted = set(self.initial_data)
+        unexpected = sorted(submitted - self.allowed_input_fields)
+        if unexpected:
+            raise serializers.ValidationError({
+                'non_field_errors': [f"Parâmetros não permitidos: {', '.join(unexpected)}."],
+            })
+        return attrs
