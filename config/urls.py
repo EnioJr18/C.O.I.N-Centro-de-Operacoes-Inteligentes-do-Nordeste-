@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/v1/auth/', include('authentication.urls')),
     path('api/v1/', include('fleet.urls')),
     path('api/v1/', include('dispatch.urls')),
+    path('api/v1/', include('dashboard.urls')),
     path('fleet/api/v1/emergencies/dispatch/', LegacyDispatchEmergencyAPIView.as_view(), name='legacy-dispatch-emergency'),
     path('health/live/', live, name='health-live'),
     path('health/ready/', ready, name='health-ready'),

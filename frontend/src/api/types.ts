@@ -26,3 +26,17 @@ export interface DispatchEvent {
   event_id: string; schema_version: 1; occurred_at: string; action: 'DISPATCH'
   unit_id: number; unit_name: string; new_status: UnitStatus; mission_id: number; lat: number; lon: number
 }
+export interface DashboardRecentMission {
+  id: number; description: string; status: MissionStatus; created_at: string
+  assigned_unit: Pick<FleetUnit, 'id' | 'name'> | null
+}
+export interface DashboardFleetSummary {
+  total: number; available: number; availability_percentage: number
+  with_location: number; without_location: number; by_status: Record<UnitStatus, number>
+}
+export interface DashboardMissionSummary {
+  total: number; by_status: Record<MissionStatus, number>; recent: DashboardRecentMission[]
+}
+export interface DashboardSummary {
+  generated_at: string; fleet: DashboardFleetSummary; missions: DashboardMissionSummary
+}
