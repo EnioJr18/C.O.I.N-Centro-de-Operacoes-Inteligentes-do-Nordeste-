@@ -45,7 +45,7 @@ describe('área operacional', () => {
     renderOperations()
     await screen.findByText('Alfa 01')
     const options = mocks.socket.options as { onEvent: (event: unknown) => void; onConnected: () => void }
-    act(() => options.onEvent({ unit_id: 1, new_status: 'BUSY', lat: -7, lon: -38 }))
+    act(() => options.onEvent({ action: 'DISPATCH', unit_id: 1, new_status: 'BUSY', lat: -7, lon: -38 }))
     expect(screen.getByRole('button', { name: /Alfa 01/, pressed: false })).toHaveTextContent('Em atendimento')
     expect(screen.getByRole('button', { name: /Mapa: Alfa 01/ })).toHaveTextContent('-9')
     act(() => options.onConnected())

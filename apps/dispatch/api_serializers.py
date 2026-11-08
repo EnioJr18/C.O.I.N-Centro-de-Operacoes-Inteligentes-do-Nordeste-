@@ -8,6 +8,9 @@ from .models.history import MissionHistory
 from .models.mission import Mission
 
 
+MAX_CANCELLATION_REASON_LENGTH = 1000
+
+
 class MissionSerializer(serializers.ModelSerializer):
     location = CoordinatePointField(read_only=True)
     assigned_unit = FleetUnitSerializer(read_only=True)
@@ -23,11 +26,45 @@ class MissionCreateSerializer(serializers.Serializer):
     location = CoordinatePointField()
 
 
+class MissionHistoryActorSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    username = serializers.CharField(read_only=True)
+    first_name = serializers.CharField(read_only=True)
+    last_name = serializers.CharField(read_only=True)
+
+
 class MissionHistorySerializer(serializers.ModelSerializer):
+    actor = MissionHistoryActorSerializer(read_only=True, allow_null=True)
+
     class Meta:
         model = MissionHistory
-        fields = ('id', 'status', 'notes', 'timestamp')
+        fields = ('id', 'status', 'notes', 'timestamp', 'actor')
         read_only_fields = fields
+
+
+class StrictActionSerializer(serializers.Serializer):
+    def to_internal_value(self, data):
+        if not isinstance(data, dict):
+            raise serializers.ValidationError('O payload deve ser um objeto JSON.')
+        unknown = set(data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError({
+                field: ['Campo não permitido.'] for field in sorted(unknown)
+            })
+        return super().to_internal_value(data)
+
+
+class CompleteMissionSerializer(StrictActionSerializer):
+    pass
+
+
+class CancelMissionSerializer(StrictActionSerializer):
+    reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=MAX_CANCELLATION_REASON_LENGTH,
+    )
 
 
 class MissionFilterSerializer(serializers.Serializer):

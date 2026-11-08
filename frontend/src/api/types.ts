@@ -18,6 +18,7 @@ export interface Mission {
 }
 export interface MissionHistory {
   id: number; status: MissionStatus; notes: string | null; timestamp: string
+  actor: Pick<User, 'id' | 'username' | 'first_name' | 'last_name'> | null
 }
 export interface MissionPayload { description: string; location: Coordinates }
 export interface DispatchPayload extends MissionPayload { required_type?: UnitType }
@@ -26,6 +27,13 @@ export interface DispatchEvent {
   event_id: string; schema_version: 1; occurred_at: string; action: 'DISPATCH'
   unit_id: number; unit_name: string; new_status: UnitStatus; mission_id: number; lat: number; lon: number
 }
+export interface MissionTransitionEvent {
+  event_id: string; schema_version: 1; occurred_at: string
+  action: 'MISSION_COMPLETED' | 'MISSION_CANCELLED'
+  mission_id: number; mission_previous_status: MissionStatus; mission_new_status: MissionStatus
+  unit_id: number | null; unit_previous_status: UnitStatus | null; unit_new_status: UnitStatus | null
+}
+export type FleetEvent = DispatchEvent | MissionTransitionEvent
 export interface DashboardRecentMission {
   id: number; description: string; status: MissionStatus; created_at: string
   assigned_unit: Pick<FleetUnit, 'id' | 'name'> | null

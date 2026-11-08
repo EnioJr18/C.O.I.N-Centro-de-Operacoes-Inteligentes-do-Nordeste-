@@ -268,7 +268,10 @@ class FleetWebSocketTests(TransactionTestCase):
             publish.assert_called_once()
             self.assertEqual(publish.call_args.args[0]['mission_id'], response.data['mission']['id'])
 
-        FleetUnit.objects.update(status=FleetUnit.UnitStatus.AVAILABLE)
+        FleetUnit.objects.create(
+            name='Bravo', license_plate='WS-5678', unit_type=UnitType.USB,
+            current_location=Point(-35.01, -9.01, srid=4326),
+        )
         with patch('dispatch.api_views.publish_fleet_event') as publish:
             with transaction.atomic():
                 response = client.post(reverse('fleet:dispatch_emergency'), payload, format='json')

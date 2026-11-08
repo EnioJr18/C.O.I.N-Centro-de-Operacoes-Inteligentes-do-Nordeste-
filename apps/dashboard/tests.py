@@ -78,8 +78,8 @@ class DashboardSummarySelectorTestCase(TestCase):
     def test_aggregates_fleet_missions_and_recent_rows_in_three_queries(self):
         assigned = self.create_unit(1)
         self.create_unit(2, current_location=None)
-        self.create_unit(3, status=FleetUnit.UnitStatus.BUSY)
-        self.create_unit(4, status=FleetUnit.UnitStatus.BUSY, current_location=None)
+        busy_one = self.create_unit(3, status=FleetUnit.UnitStatus.BUSY)
+        busy_two = self.create_unit(4, status=FleetUnit.UnitStatus.BUSY, current_location=None)
         self.create_unit(5, status=FleetUnit.UnitStatus.BUSY)
         self.create_unit(6, status=FleetUnit.UnitStatus.MAINTENANCE, current_location=None)
 
@@ -98,7 +98,12 @@ class DashboardSummarySelectorTestCase(TestCase):
             mission = self.create_mission(
                 index,
                 status,
-                assigned_unit=assigned if index == 7 else None,
+                assigned_unit=(
+                    busy_one if index == 4
+                    else busy_two if index == 5
+                    else assigned if index == 7
+                    else None
+                ),
             )
             Mission.objects.filter(pk=mission.pk).update(
                 created_at=base + timedelta(minutes=index if index < 6 else 6),

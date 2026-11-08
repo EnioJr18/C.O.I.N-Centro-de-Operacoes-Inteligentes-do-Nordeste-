@@ -62,13 +62,13 @@ class MissionHistoryTestCase(TestCase):
         mission.save()
         self.assertEqual(mission.history.count(), 1)
 
-        mission.status = Mission.MissionStatus.EM_ANDAMENTO
+        mission.status = Mission.MissionStatus.CANCELADA
         mission.save()
         mission.save()
 
         self.assertEqual(
             list(mission.history.order_by("id").values_list("status", flat=True)),
-            [Mission.MissionStatus.PENDENTE, Mission.MissionStatus.EM_ANDAMENTO],
+            [Mission.MissionStatus.PENDENTE, Mission.MissionStatus.CANCELADA],
         )
 
     def test_dispatch_completion_and_cancellation_generate_expected_history(self):
@@ -123,8 +123,10 @@ class MissionTransitionTestCase(TestCase):
         unit.refresh_from_db()
         self.assertEqual(unit.status, FleetUnit.UnitStatus.AVAILABLE)
 
-        with self.assertRaises(MissionStateError):
-            complete_mission(mission)
+        self.assertEqual(
+            complete_mission(mission).status,
+            Mission.MissionStatus.CONCLUIDA,
+        )
 
     def test_cancel_accepts_pending_or_in_progress_and_rejects_completed(self):
         pending = create_mission("Pendente", -9.0, -35.0)

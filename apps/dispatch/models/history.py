@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from .mission import Mission
 
@@ -8,6 +9,14 @@ class MissionHistory(models.Model):
         Mission,
         on_delete=models.CASCADE,
         related_name='history'
+    )
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='mission_history_entries',
     )
 
     status = models.CharField(

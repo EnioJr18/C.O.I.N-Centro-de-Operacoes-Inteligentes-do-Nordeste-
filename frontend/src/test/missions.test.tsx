@@ -4,11 +4,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import type { Mission } from '../api/types'
 
-const mocks = vi.hoisted(() => ({ client: {}, list: vi.fn(), get: vi.fn(), history: vi.fn(), create: vi.fn(), dispatch: vi.fn() }))
+const mocks = vi.hoisted(() => ({ client: {}, list: vi.fn(), get: vi.fn(), history: vi.fn(), create: vi.fn(), dispatch: vi.fn(), complete: vi.fn(), cancel: vi.fn() }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ client: mocks.client, user: { username: 'op', first_name: '', role: 'OPERADOR' }, logout: vi.fn() }) }))
 vi.mock('../api/missions', async importOriginal => {
   const actual = await importOriginal<typeof import('../api/missions')>()
-  return { ...actual, listMissions: mocks.list, getMission: mocks.get, getMissionHistory: mocks.history, createMission: mocks.create, dispatchEmergency: mocks.dispatch }
+  return { ...actual, listMissions: mocks.list, getMission: mocks.get, getMissionHistory: mocks.history, createMission: mocks.create, dispatchEmergency: mocks.dispatch, completeMission: mocks.complete, cancelMission: mocks.cancel }
 })
 vi.mock('../map/LocationPicker', () => ({ LocationPicker: ({ latitude, longitude, onChange, errors = {} }: { latitude: string; longitude: string; onChange: (lat: string, lon: string) => void; errors?: { latitude?: string; longitude?: string } }) => <div>
   <label>Latitude<input value={latitude} onChange={event => onChange(event.target.value, longitude)} /></label>{errors.latitude && <span>{errors.latitude}</span>}
@@ -61,10 +61,11 @@ describe('lista e detalhes de missões', () => {
 
   it('mostra missão sem unidade e histórico paginado', async () => {
     mocks.get.mockResolvedValue(mission)
-    mocks.history.mockResolvedValue({ count: 21, next: '/api/v1/missions/7/history/?page=2', previous: null, results: [{ id: 1, status: 'Pendente', notes: null, timestamp: mission.created_at }] })
+    mocks.history.mockResolvedValue({ count: 21, next: '/api/v1/missions/7/history/?page=2', previous: null, results: [{ id: 1, status: 'Pendente', notes: null, timestamp: mission.created_at, actor: null }] })
     renderRoute(<MissionDetailsPage />, '/missions/7', '/missions/:missionId')
     expect(await screen.findByText('Nenhuma unidade foi atribuída a esta missão.')).toBeInTheDocument()
     expect(screen.getByText('Sem observações.')).toBeInTheDocument()
+    expect(screen.getByText('Operador: Não identificado')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Próxima/ }))
     await waitFor(() => expect(mocks.history).toHaveBeenLastCalledWith(mocks.client, 7, 2, expect.any(AbortSignal)))
   })
@@ -125,5 +126,56 @@ describe('operações de escrita', () => {
     renderRoute(<DispatchPage />, '/missions/dispatch', '/missions/dispatch'); fillValid(); fireEvent.click(screen.getByRole('button', { name: 'Confirmar despacho' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Resultado indeterminado')
     expect(mocks.dispatch).toHaveBeenCalledOnce()
+  })
+
+  it('confirma conclusão, atualiza a missão e impede submissão duplicada', async () => {
+    const active = { ...mission, status: 'Em Andamento' as const, assigned_unit: unit }
+    let resolve!: (value: Mission) => void
+    mocks.get.mockResolvedValue(active)
+    mocks.history.mockResolvedValue({ count: 1, next: null, previous: null, results: [{ id: 1, status: 'Em Andamento', notes: null, timestamp: mission.created_at, actor: { id: 1, username: 'op', first_name: 'Ana', last_name: 'Lima' } }] })
+    mocks.complete.mockReturnValue(new Promise<Mission>(done => { resolve = done }))
+    renderRoute(<MissionDetailsPage />, '/missions/7', '/missions/:missionId')
+    const trigger = await screen.findByRole('button', { name: 'Concluir missão' })
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: 'Concluir missão?' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    const confirm = screen.getByRole('button', { name: 'Confirmar conclusão' })
+    expect(confirm).toHaveFocus()
+    fireEvent.click(confirm); fireEvent.click(confirm)
+    expect(mocks.complete).toHaveBeenCalledOnce()
+    resolve({ ...active, status: 'Concluída', assigned_unit: { ...unit, status: 'AVAILABLE' } })
+    expect(await screen.findByText('Missão concluída com sucesso.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Concluir missão' })).not.toBeInTheDocument()
+    expect(screen.getByText('Operador: Ana Lima')).toBeInTheDocument()
+  })
+
+  it('cancela com motivo opcional e restaura foco ao fechar com Escape', async () => {
+    mocks.get.mockResolvedValue(mission)
+    mocks.history.mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
+    mocks.cancel.mockResolvedValue({ ...mission, status: 'Cancelada' })
+    renderRoute(<MissionDetailsPage />, '/missions/7', '/missions/:missionId')
+    const trigger = await screen.findByRole('button', { name: 'Cancelar missão' })
+    fireEvent.click(trigger)
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() => expect(trigger).toHaveFocus())
+    fireEvent.click(trigger)
+    fireEvent.change(screen.getByLabelText(/Motivo do cancelamento/), { target: { value: '  Sem acesso  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar cancelamento' }))
+    await waitFor(() => expect(mocks.cancel).toHaveBeenCalledWith(mocks.client, 7, '  Sem acesso  '))
+    expect(await screen.findByText('Missão cancelada com sucesso.')).toBeInTheDocument()
+  })
+
+  it('preserva dados após conflito e oferece reconciliação', async () => {
+    const active = { ...mission, status: 'Em Andamento' as const, assigned_unit: unit }
+    mocks.get.mockResolvedValue(active)
+    mocks.history.mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
+    mocks.complete.mockRejectedValue(new ApiError(409, undefined, { detail: 'Conflito' }))
+    renderRoute(<MissionDetailsPage />, '/missions/7', '/missions/:missionId')
+    fireEvent.click(await screen.findByRole('button', { name: 'Concluir missão' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar conclusão' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('alterada por outra operação')
+    expect(screen.getByText('Atendimento urgente')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Atualizar dados/ }))
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2))
   })
 })

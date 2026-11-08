@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '../api/client'
-import { createMission, dispatchEmergency, getMissionHistory, localDateTimeToIso, missionListPath } from '../api/missions'
+import { cancelMission, completeMission, createMission, dispatchEmergency, getMissionHistory, localDateTimeToIso, missionListPath } from '../api/missions'
 
 describe('API de missões', () => {
   it('serializa filtros reais, datas com fuso e paginação sem carregar todas as páginas', () => {
@@ -24,5 +24,10 @@ describe('API de missões', () => {
     await dispatchEmergency(client, { description: 'Urgência', location: { latitude: -9, longitude: -35 }, required_type: 'USA' })
     expect(request.mock.calls.at(-1)?.[0]).toBe('/api/v1/emergencies/dispatch/')
     expect(JSON.parse(request.mock.calls.at(-1)?.[1].body as string)).not.toHaveProperty('requirements')
+    await completeMission(client, 9)
+    expect(request).toHaveBeenLastCalledWith('/api/v1/missions/9/complete/', expect.objectContaining({ method: 'POST', body: '{}' }))
+    await cancelMission(client, 9, '  Sem acesso  ')
+    expect(request.mock.calls.at(-1)?.[0]).toBe('/api/v1/missions/9/cancel/')
+    expect(JSON.parse(request.mock.calls.at(-1)?.[1].body as string)).toEqual({ reason: 'Sem acesso' })
   })
 })

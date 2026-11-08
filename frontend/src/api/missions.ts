@@ -48,3 +48,17 @@ export function dispatchEmergency(client: ApiClient, payload: DispatchPayload) {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
   })
 }
+
+export function completeMission(client: ApiClient, id: number) {
+  return client.request<Mission>(`/api/v1/missions/${id}/complete/`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+  })
+}
+
+export function cancelMission(client: ApiClient, id: number, reason?: string) {
+  return client.request<Mission>(`/api/v1/missions/${id}/cancel/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(reason?.trim() ? { reason: reason.trim() } : {}),
+  })
+}

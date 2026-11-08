@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.contrib.gis.db import models as gis_models
 
 class Mission(models.Model):
@@ -22,6 +23,22 @@ class Mission(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    ~Q(status='Em Andamento')
+                    | Q(assigned_unit__isnull=False)
+                ),
+                name='mission_active_requires_unit',
+            ),
+            models.UniqueConstraint(
+                fields=['assigned_unit'],
+                condition=Q(status='Em Andamento'),
+                name='mission_one_active_per_unit',
+            ),
+        ]
 
     def __str__(self):
         return f"Mission {self.id} - {self.status}"

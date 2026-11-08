@@ -43,14 +43,18 @@ def _format_mission_dict(mission):
     }
 
 
-def create_mission(description, latitude, longitude):
+@transaction.atomic
+def create_mission(description, latitude, longitude, actor=None):
     if not isinstance(description, str) or not description.strip():
         raise InvalidMissionError("A descrição da missão é obrigatória.")
 
     location = Point(longitude, latitude, srid=4326)
-    return Mission.objects.create(description=description.strip(), location=location)
+    mission = Mission(description=description.strip(), location=location)
+    mission._history_actor = actor
+    mission.save()
+    return mission
 
-def assign_unit_to_mission(mission, fleet_unit_id):
+def assign_unit_to_mission(mission, fleet_unit_id, actor=None):
     with transaction.atomic():
         locked_mission = Mission.objects.select_for_update().get(pk=mission.pk)
         fleet_unit = FleetUnit.objects.select_for_update().get(id=fleet_unit_id)
@@ -66,12 +70,16 @@ def assign_unit_to_mission(mission, fleet_unit_id):
 
         locked_mission.assigned_unit = fleet_unit
         locked_mission.status = Mission.MissionStatus.EM_ANDAMENTO
+        locked_mission._history_actor = actor
         locked_mission.save(update_fields=["assigned_unit", "status", "updated_at"])
 
         return locked_mission
 
 
-def dispatch_emergency(description, latitude, longitude, required_type=None, requirements=None):
+def dispatch_emergency(
+    description, latitude, longitude, required_type=None, requirements=None,
+    actor=None,
+):
     from fleet.selectors import get_nearest_available_units
 
     candidates = get_nearest_available_units(
@@ -88,40 +96,127 @@ def dispatch_emergency(description, latitude, longitude, required_type=None, req
     distance_meters = selected_unit.distance.m
 
     with transaction.atomic():
-        mission = create_mission(description, latitude, longitude)
-        assigned_mission = assign_unit_to_mission(mission, selected_unit.id)
+        mission = create_mission(description, latitude, longitude, actor=actor)
+        assigned_mission = assign_unit_to_mission(
+            mission, selected_unit.id, actor=actor,
+        )
 
     return assigned_mission, distance_meters
 
-def complete_mission(mission):
+def _active_mission_uses_unit(unit_id, excluded_mission_id):
+    return Mission.objects.filter(
+        assigned_unit_id=unit_id,
+        status=Mission.MissionStatus.EM_ANDAMENTO,
+    ).exclude(pk=excluded_mission_id).exists()
+
+
+def _lock_and_validate_active_unit(locked_mission):
+    if not locked_mission.assigned_unit_id:
+        raise MissionStateError("Missão em andamento sem unidade associada.")
+    unit = FleetUnit.objects.select_for_update().get(
+        pk=locked_mission.assigned_unit_id,
+    )
+    if _active_mission_uses_unit(unit.pk, locked_mission.pk):
+        raise MissionStateError("A unidade está associada a outra missão em andamento.")
+    if unit.status == FleetUnit.UnitStatus.AVAILABLE:
+        raise MissionStateError(
+            "A unidade associada está disponível enquanto a missão permanece em andamento."
+        )
+    if unit.status not in (
+        FleetUnit.UnitStatus.BUSY,
+        FleetUnit.UnitStatus.MAINTENANCE,
+    ):
+        raise MissionStateError("Status operacional da unidade é inconsistente.")
+    return unit
+
+
+def _schedule_transition_event(
+    *, action, mission, previous_status, unit, unit_previous_status,
+):
+    from fleet.events import build_mission_transition_event, publish_fleet_event
+
+    event = build_mission_transition_event(
+        action=action,
+        mission_id=mission.pk,
+        previous_status=previous_status,
+        new_status=mission.status,
+        unit_id=unit.pk if unit else None,
+        unit_previous_status=unit_previous_status,
+        unit_new_status=unit.status if unit else None,
+    )
+    transaction.on_commit(lambda event=event: publish_fleet_event(event))
+
+
+def complete_mission(mission, actor=None):
     with transaction.atomic():
         locked_mission = Mission.objects.select_for_update().get(pk=mission.pk)
+        if locked_mission.status == Mission.MissionStatus.CONCLUIDA:
+            return locked_mission
         if locked_mission.status != Mission.MissionStatus.EM_ANDAMENTO:
             raise MissionStateError("Apenas missões em andamento podem ser concluídas.")
 
-        if locked_mission.assigned_unit:
-            unit = FleetUnit.objects.select_for_update().get(pk=locked_mission.assigned_unit_id)
+        unit = _lock_and_validate_active_unit(locked_mission)
+        unit_previous_status = unit.status
+        if unit.status == FleetUnit.UnitStatus.BUSY:
             unit.status = FleetUnit.UnitStatus.AVAILABLE
             unit.save(update_fields=["status", "updated_at"])
 
+        previous_status = locked_mission.status
         locked_mission.status = Mission.MissionStatus.CONCLUIDA
+        locked_mission.assigned_unit = unit
+        locked_mission._history_actor = actor
         locked_mission.save(update_fields=["status", "updated_at"])
+        _schedule_transition_event(
+            action='MISSION_COMPLETED',
+            mission=locked_mission,
+            previous_status=previous_status,
+            unit=unit,
+            unit_previous_status=unit_previous_status,
+        )
         return locked_mission
 
-def cancel_mission(mission):
+def cancel_mission(mission, actor=None, reason=None):
     with transaction.atomic():
         locked_mission = Mission.objects.select_for_update().get(pk=mission.pk)
-        valid_status = [Mission.MissionStatus.PENDENTE, Mission.MissionStatus.EM_ANDAMENTO]
-        if locked_mission.status not in valid_status:
+        if locked_mission.status == Mission.MissionStatus.CANCELADA:
+            return locked_mission
+        if locked_mission.status == Mission.MissionStatus.CONCLUIDA:
             raise MissionStateError("Esta missão não pode mais ser cancelada.")
 
-        if locked_mission.assigned_unit:
-            unit = FleetUnit.objects.select_for_update().get(pk=locked_mission.assigned_unit_id)
+        unit = None
+        unit_previous_status = None
+        if locked_mission.status == Mission.MissionStatus.PENDENTE:
+            if locked_mission.assigned_unit_id:
+                FleetUnit.objects.select_for_update().get(
+                    pk=locked_mission.assigned_unit_id,
+                )
+                raise MissionStateError(
+                    "Missão pendente possui uma unidade associada inesperadamente."
+                )
+        elif locked_mission.status == Mission.MissionStatus.EM_ANDAMENTO:
+            unit = _lock_and_validate_active_unit(locked_mission)
+            unit_previous_status = unit.status
+        else:
+            raise MissionStateError("Esta missão não pode mais ser cancelada.")
+
+        if unit and unit.status == FleetUnit.UnitStatus.BUSY:
             unit.status = FleetUnit.UnitStatus.AVAILABLE
             unit.save(update_fields=["status", "updated_at"])
 
+        previous_status = locked_mission.status
         locked_mission.status = Mission.MissionStatus.CANCELADA
+        if unit:
+            locked_mission.assigned_unit = unit
+        locked_mission._history_actor = actor
+        locked_mission._history_notes = reason.strip() if reason and reason.strip() else None
         locked_mission.save(update_fields=["status", "updated_at"])
+        _schedule_transition_event(
+            action='MISSION_CANCELLED',
+            mission=locked_mission,
+            previous_status=previous_status,
+            unit=unit,
+            unit_previous_status=unit_previous_status,
+        )
         return locked_mission
 
 

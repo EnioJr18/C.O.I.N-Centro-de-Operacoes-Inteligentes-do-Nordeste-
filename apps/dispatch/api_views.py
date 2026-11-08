@@ -1,5 +1,6 @@
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
@@ -11,13 +12,16 @@ from fleet.events import build_dispatch_event, publish_fleet_event
 from .api_serializers import (
     DispatchRequestSerializer,
     DispatchResponseSerializer,
+    CancelMissionSerializer,
+    CompleteMissionSerializer,
     MissionCreateSerializer,
     MissionFilterSerializer,
     MissionHistorySerializer,
     MissionSerializer,
 )
 from .selectors import get_mission_history, get_missions
-from .services import create_mission, dispatch_emergency
+from .models.mission import Mission
+from .services import cancel_mission, complete_mission, create_mission, dispatch_emergency
 
 
 @extend_schema(tags=['missions'], parameters=[MissionFilterSerializer])
@@ -36,7 +40,8 @@ class MissionListAPIView(ListAPIView):
         serializer.is_valid(raise_exception=True)
         point = serializer.validated_data['location']
         mission = create_mission(
-            serializer.validated_data['description'], point.y, point.x
+            serializer.validated_data['description'], point.y, point.x,
+            actor=request.user,
         )
         return Response(MissionSerializer(mission).data, status=status.HTTP_201_CREATED)
 
@@ -58,6 +63,58 @@ class MissionHistoryListAPIView(ListAPIView):
 
 
 @extend_schema(
+    tags=['missions'],
+    request=CompleteMissionSerializer,
+    responses={
+        200: MissionSerializer,
+        400: OpenApiResponse(description='Payload inválido.'),
+        401: OpenApiResponse(description='Autenticação ausente, inválida ou expirada.'),
+        403: OpenApiResponse(description='Usuário sem papel operacional.'),
+        404: OpenApiResponse(description='Missão não encontrada.'),
+        409: OpenApiResponse(description='Estado ou vínculo operacional inconsistente.'),
+    },
+    description='Conclui de forma idempotente uma missão em andamento.',
+)
+class CompleteMissionAPIView(APIView):
+    permission_classes = [IsOperatorOrAdmin]
+
+    def post(self, request, pk):
+        serializer = CompleteMissionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        mission = get_object_or_404(Mission.objects.only('pk'), pk=pk)
+        mission = complete_mission(mission, actor=request.user)
+        return Response(MissionSerializer(mission).data)
+
+
+@extend_schema(
+    tags=['missions'],
+    request=CancelMissionSerializer,
+    responses={
+        200: MissionSerializer,
+        400: OpenApiResponse(description='Payload inválido.'),
+        401: OpenApiResponse(description='Autenticação ausente, inválida ou expirada.'),
+        403: OpenApiResponse(description='Usuário sem papel operacional.'),
+        404: OpenApiResponse(description='Missão não encontrada.'),
+        409: OpenApiResponse(description='Estado ou vínculo operacional inconsistente.'),
+    },
+    description='Cancela de forma idempotente uma missão pendente ou em andamento.',
+)
+class CancelMissionAPIView(APIView):
+    permission_classes = [IsOperatorOrAdmin]
+
+    def post(self, request, pk):
+        serializer = CancelMissionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        mission = get_object_or_404(Mission.objects.only('pk'), pk=pk)
+        mission = cancel_mission(
+            mission,
+            actor=request.user,
+            reason=serializer.validated_data.get('reason'),
+        )
+        return Response(MissionSerializer(mission).data)
+
+
+@extend_schema(
     tags=['dispatch'],
     request=DispatchRequestSerializer,
     responses={201: DispatchResponseSerializer},
@@ -76,6 +133,7 @@ class DispatchEmergencyAPIView(APIView):
             longitude=point.x,
             required_type=serializer.validated_data.get('required_type'),
             requirements=serializer.validated_data.get('requirements'),
+            actor=request.user,
         )
 
         event = build_dispatch_event(mission, point)

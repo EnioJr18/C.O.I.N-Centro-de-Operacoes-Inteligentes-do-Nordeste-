@@ -1,12 +1,12 @@
 import type { ApiClient } from '../api/client'
-import type { DispatchEvent, UnitStatus } from '../api/types'
+import type { DispatchEvent, FleetEvent, MissionStatus, MissionTransitionEvent, UnitStatus } from '../api/types'
 
 export type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 const statuses: UnitStatus[] = ['AVAILABLE', 'BUSY', 'MAINTENANCE']
 
-export function parseDispatchEvent(raw: string): DispatchEvent | null {
-  try {
-    const value: unknown = JSON.parse(raw)
+const missionStatuses: MissionStatus[] = ['Pendente', 'Em Andamento', 'Concluída', 'Cancelada']
+
+function parseDispatchValue(value: unknown): DispatchEvent | null {
     if (!value || typeof value !== 'object') return null
     const e = value as Record<string, unknown>
     if (e.schema_version !== 1 || e.action !== 'DISPATCH' || typeof e.event_id !== 'string' || !e.event_id
@@ -17,13 +17,50 @@ export function parseDispatchEvent(raw: string): DispatchEvent | null {
       || typeof e.lat !== 'number' || !Number.isFinite(e.lat) || Math.abs(e.lat) > 90
       || typeof e.lon !== 'number' || !Number.isFinite(e.lon) || Math.abs(e.lon) > 180) return null
     return e as unknown as DispatchEvent
+}
+
+function parseMissionTransitionValue(value: unknown): MissionTransitionEvent | null {
+  if (!value || typeof value !== 'object') return null
+  const e = value as Record<string, unknown>
+  if (e.schema_version !== 1
+    || !['MISSION_COMPLETED', 'MISSION_CANCELLED'].includes(e.action as string)
+    || typeof e.event_id !== 'string' || !e.event_id
+    || typeof e.occurred_at !== 'string' || Number.isNaN(Date.parse(e.occurred_at))
+    || typeof e.mission_id !== 'number' || !Number.isInteger(e.mission_id)
+    || !missionStatuses.includes(e.mission_previous_status as MissionStatus)
+    || !missionStatuses.includes(e.mission_new_status as MissionStatus)) return null
+
+  const completed = e.action === 'MISSION_COMPLETED'
+  if (completed && (e.mission_previous_status !== 'Em Andamento' || e.mission_new_status !== 'Concluída')) return null
+  if (!completed && (!['Pendente', 'Em Andamento'].includes(e.mission_previous_status as string)
+    || e.mission_new_status !== 'Cancelada')) return null
+
+  const noUnit = e.unit_id === null && e.unit_previous_status === null && e.unit_new_status === null
+  const unitTransition = typeof e.unit_id === 'number' && Number.isInteger(e.unit_id)
+    && statuses.includes(e.unit_previous_status as UnitStatus)
+    && statuses.includes(e.unit_new_status as UnitStatus)
+    && ((e.unit_previous_status === 'BUSY' && e.unit_new_status === 'AVAILABLE')
+      || (e.unit_previous_status === 'MAINTENANCE' && e.unit_new_status === 'MAINTENANCE'))
+  if ((!completed && e.mission_previous_status === 'Pendente' && !noUnit)
+    || ((completed || e.mission_previous_status === 'Em Andamento') && !unitTransition)) return null
+  return e as unknown as MissionTransitionEvent
+}
+
+export function parseDispatchEvent(raw: string): DispatchEvent | null {
+  try { return parseDispatchValue(JSON.parse(raw)) } catch { return null }
+}
+
+export function parseFleetEvent(raw: string): FleetEvent | null {
+  try {
+    const value: unknown = JSON.parse(raw)
+    return parseDispatchValue(value) || parseMissionTransitionValue(value)
   } catch { return null }
 }
 
 interface Options {
   client: ApiClient
   onState: (state: ConnectionState) => void
-  onEvent: (event: DispatchEvent) => void
+  onEvent: (event: FleetEvent) => void
   onConnected: () => void
   onForbidden: () => void
 }
@@ -65,7 +102,7 @@ export class FleetSocket {
     }
     socket.onmessage = (message) => {
       if (this.stopped || this.socket !== socket || typeof message.data !== 'string') return
-      const event = parseDispatchEvent(message.data)
+      const event = parseFleetEvent(message.data)
       if (!event || this.seen.has(event.event_id)) return
       this.seen.add(event.event_id)
       if (this.seen.size > 500) this.seen.delete(this.seen.values().next().value!)

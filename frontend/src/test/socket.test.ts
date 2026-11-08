@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '../api/client'
-import { FleetSocket, parseDispatchEvent } from '../realtime/fleetSocket'
+import { FleetSocket, parseDispatchEvent, parseFleetEvent } from '../realtime/fleetSocket'
 
 class FakeSocket {
   static instances: FakeSocket[] = []
@@ -13,6 +13,7 @@ class FakeSocket {
   constructor(public url: string, public protocols: string[]) { FakeSocket.instances.push(this) }
 }
 const event = { event_id: 'event-1', schema_version: 1, occurred_at: '2026-10-27T12:30:00Z', action: 'DISPATCH', unit_id: 7, unit_name: 'Alfa', new_status: 'BUSY', mission_id: 3, lat: -9, lon: -35 }
+const completed = { event_id: 'event-2', schema_version: 1, occurred_at: '2026-10-27T12:31:00Z', action: 'MISSION_COMPLETED', mission_id: 3, mission_previous_status: 'Em Andamento', mission_new_status: 'Concluída', unit_id: 7, unit_previous_status: 'BUSY', unit_new_status: 'AVAILABLE' }
 function setup() {
   FakeSocket.instances = []
   vi.stubGlobal('WebSocket', FakeSocket)
@@ -81,6 +82,20 @@ describe('WebSocket da frota', () => {
     expect(parseDispatchEvent(JSON.stringify({ ...event, new_status: 'UNKNOWN' }))).toBeNull()
     expect(parseDispatchEvent(JSON.stringify({ ...event, lat: 91 }))).toBeNull()
     expect(parseDispatchEvent(JSON.stringify({ ...event, schema_version: 2 }))).toBeNull()
+    expect(parseFleetEvent(JSON.stringify(completed))).toEqual(completed)
+    expect(parseFleetEvent(JSON.stringify({ ...completed, unit_new_status: 'BUSY' }))).toBeNull()
+    expect(parseFleetEvent(JSON.stringify({ ...completed, action: 'UNKNOWN' }))).toBeNull()
+  })
+
+  it('entrega e deduplica eventos terminais válidos', () => {
+    const { socket, options } = setup()
+    const ws = FakeSocket.instances[0]
+    ws.onopen?.()
+    ws.onmessage?.({ data: JSON.stringify(completed) })
+    ws.onmessage?.({ data: JSON.stringify(completed) })
+    expect(options.onEvent).toHaveBeenCalledOnce()
+    expect(options.onEvent).toHaveBeenCalledWith(completed)
+    socket.stop()
   })
 
   it('não aceita protocolo negociado incorreto e limita expirações consecutivas', async () => {

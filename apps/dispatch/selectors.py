@@ -21,4 +21,6 @@ def get_mission_or_404(mission_id):
 
 def get_mission_history(mission_id):
     mission = get_mission_or_404(mission_id)
-    return MissionHistory.objects.filter(mission=mission).select_related('mission')
+    return MissionHistory.objects.filter(mission=mission).select_related(
+        'mission', 'actor',
+    )

@@ -41,7 +41,9 @@ export function OperationsPage() {
     const socket = new FleetSocket({
       client, onState: setConnection, onConnected: () => { void reload() }, onForbidden: logout,
       onEvent: event => {
-        setUnits(previous => previous.map(unit => unit.id === event.unit_id ? { ...unit, status: event.new_status } : unit))
+        if (event.action === 'DISPATCH') {
+          setUnits(previous => previous.map(unit => unit.id === event.unit_id ? { ...unit, status: event.new_status } : unit))
+        }
         void reload()
       },
     })

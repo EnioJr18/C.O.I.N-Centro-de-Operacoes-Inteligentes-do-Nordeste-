@@ -18,17 +18,21 @@ def capture_previous_status(sender, instance, **kwargs):
 
 @receiver(post_save, sender=Mission)
 def create_mission_history(sender, instance, created, **kwargs):
+    actor = getattr(instance, '_history_actor', None)
+    explicit_notes = getattr(instance, '_history_notes', None)
     if created:
         MissionHistory.objects.create(
             mission=instance,
+            actor=actor,
             status=instance.status,
-            notes="Missão criada"
+            notes=explicit_notes or "Missão criada"
         )
     elif instance._previous_status != instance.status:
         MissionHistory.objects.create(
             mission=instance,
+            actor=actor,
             status=instance.status,
-            notes=(
+            notes=explicit_notes or (
                 f"Status atualizado de '{instance._previous_status}' "
                 f"para '{instance.status}'."
             ),
