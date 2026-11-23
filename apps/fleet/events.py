@@ -44,6 +44,21 @@ def build_mission_transition_event(
     }
 
 
+def build_unit_maintenance_event(
+    *, action, unit_id, unit_name, previous_status, new_status,
+):
+    return {
+        'event_id': str(uuid4()),
+        'schema_version': 1,
+        'occurred_at': datetime.now(timezone.utc).isoformat(),
+        'action': action,
+        'unit_id': unit_id,
+        'unit_name': unit_name,
+        'unit_previous_status': previous_status,
+        'unit_new_status': new_status,
+    }
+
+
 def publish_fleet_event(event):
     try:
         async_to_sync(get_channel_layer().group_send)(

@@ -348,14 +348,10 @@ class MissionLifecycleAdminTests(MissionLifecycleMixin, TestCase):
             'status': FleetUnit.UnitStatus.MAINTENANCE,
             '_save': 'Salvar',
         })
-        if response.status_code == 200:
-            self.assertFalse(
-                response.context['adminform'].form.errors,
-                response.context['adminform'].form.errors.as_json(),
-            )
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 403)
         assigned.refresh_from_db()
         self.assertEqual(assigned.status, FleetUnit.UnitStatus.BUSY)
+        self.assertEqual(assigned.capabilities, {})
 
         self.assertEqual(
             self.client.post(

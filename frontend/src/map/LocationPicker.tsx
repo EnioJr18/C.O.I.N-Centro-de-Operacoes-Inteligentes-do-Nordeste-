@@ -8,11 +8,12 @@ function point(latitude: string, longitude: string): [number, number] | null {
   return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lat, lon] : null
 }
 
-export function LocationPicker({ latitude, longitude, onChange, errors = {} }: {
+export function LocationPicker({ latitude, longitude, onChange, errors = {}, ariaLabel }: {
   latitude: string
   longitude: string
   onChange: (latitude: string, longitude: string) => void
   errors?: { latitude?: string; longitude?: string }
+  ariaLabel?: string
 }) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
@@ -52,7 +53,7 @@ export function LocationPicker({ latitude, longitude, onChange, errors = {} }: {
   return <div className="location-fieldset"><div className="coordinate-grid">
     <label>Latitude<input aria-invalid={!!errors.latitude} inputMode="decimal" value={latitude} onChange={event => onChange(event.target.value, longitude)} placeholder="-9.000000" />{errors.latitude && <span className="field-error">{errors.latitude}</span>}</label>
     <label>Longitude<input aria-invalid={!!errors.longitude} inputMode="decimal" value={longitude} onChange={event => onChange(latitude, event.target.value)} placeholder="-35.000000" />{errors.longitude && <span className="field-error">{errors.longitude}</span>}</label>
-  </div><div className="location-map-wrap"><div ref={container} className="location-map" aria-label="Selecione a localização da ocorrência no mapa" />
+  </div><div className="location-map-wrap"><div ref={container} className="location-map" aria-label={ariaLabel ?? 'Selecione a localização da ocorrência no mapa'} />
     {mapUnavailable && <div className="location-map-warning" role="status">Mapa indisponível. As coordenadas digitadas continuam válidas.</div>}
   </div><small className="field-help">Clique no mapa ou informe as coordenadas diretamente.</small></div>
 }

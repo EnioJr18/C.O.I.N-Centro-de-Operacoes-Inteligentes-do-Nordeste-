@@ -11,6 +11,17 @@ export interface FleetUnit {
   current_location: Coordinates | null; status: UnitStatus; capabilities: Record<string, unknown>
   created_at: string; updated_at: string
 }
+export interface FleetUnitPayload {
+  name: string; license_plate: string; unit_type: UnitType
+  current_location?: Coordinates | null; capabilities?: Record<string, unknown>
+}
+export interface FleetUnitHistory {
+  id: number
+  action: 'UNIT_CREATED' | 'UNIT_UPDATED' | 'UNIT_MAINTENANCE_STARTED' | 'UNIT_MAINTENANCE_ENDED'
+  previous_status: UnitStatus | null; new_status: UnitStatus | null
+  changed_fields: string[]; request_id: string; created_at: string
+  actor: Pick<User, 'id' | 'username' | 'first_name' | 'last_name'>
+}
 export interface Page<T> { count: number; next: string | null; previous: string | null; results: T[] }
 export interface Mission {
   id: number; description: string; location: Coordinates; status: MissionStatus
@@ -33,7 +44,14 @@ export interface MissionTransitionEvent {
   mission_id: number; mission_previous_status: MissionStatus; mission_new_status: MissionStatus
   unit_id: number | null; unit_previous_status: UnitStatus | null; unit_new_status: UnitStatus | null
 }
-export type FleetEvent = DispatchEvent | MissionTransitionEvent
+export interface UnitMaintenanceEvent {
+  event_id: string; schema_version: 1; occurred_at: string
+  action: 'UNIT_MAINTENANCE_STARTED' | 'UNIT_MAINTENANCE_ENDED'
+  unit_id: number; unit_name: string
+  unit_previous_status: 'AVAILABLE' | 'MAINTENANCE'
+  unit_new_status: 'AVAILABLE' | 'MAINTENANCE'
+}
+export type FleetEvent = DispatchEvent | MissionTransitionEvent | UnitMaintenanceEvent
 export interface DashboardRecentMission {
   id: number; description: string; status: MissionStatus; created_at: string
   assigned_unit: Pick<FleetUnit, 'id' | 'name'> | null

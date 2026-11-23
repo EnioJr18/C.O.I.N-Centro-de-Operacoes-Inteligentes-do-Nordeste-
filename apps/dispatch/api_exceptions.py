@@ -9,6 +9,7 @@ from .services import (
     NoEligibleUnitError,
     UnitUnavailableError,
 )
+from fleet.services import DuplicateLicensePlateError, FleetUnitConflictError
 
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,10 @@ def api_exception_handler(exc, context):
     if isinstance(exc, NoEligibleUnitError):
         return Response({'detail': str(exc)}, status=404)
     if isinstance(exc, (MissionStateError, UnitUnavailableError)):
+        return Response({'detail': str(exc)}, status=409)
+    if isinstance(exc, DuplicateLicensePlateError):
+        return Response({'license_plate': [str(exc)]}, status=400)
+    if isinstance(exc, FleetUnitConflictError):
         return Response({'detail': str(exc)}, status=409)
 
     response = exception_handler(exc, context)

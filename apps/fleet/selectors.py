@@ -1,6 +1,7 @@
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from .models.vehicle import FleetUnit
+from .models.history import FleetUnitHistory
 
 
 def get_fleet_units(status: str | None = None, unit_type: str | None = None):
@@ -36,4 +37,12 @@ def get_nearest_available_units(
         queryset
         .annotate(distance=Distance("current_location", emergency_point))
         .order_by("distance")[:limit]
+    )
+
+
+def get_fleet_unit_history(unit_id):
+    return (
+        FleetUnitHistory.objects.filter(unit_id=unit_id)
+        .select_related('actor')
+        .order_by('-created_at', '-id')
     )

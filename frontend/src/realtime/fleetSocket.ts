@@ -1,5 +1,5 @@
 import type { ApiClient } from '../api/client'
-import type { DispatchEvent, FleetEvent, MissionStatus, MissionTransitionEvent, UnitStatus } from '../api/types'
+import type { DispatchEvent, FleetEvent, MissionStatus, MissionTransitionEvent, UnitMaintenanceEvent, UnitStatus } from '../api/types'
 
 export type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 const statuses: UnitStatus[] = ['AVAILABLE', 'BUSY', 'MAINTENANCE']
@@ -46,6 +46,21 @@ function parseMissionTransitionValue(value: unknown): MissionTransitionEvent | n
   return e as unknown as MissionTransitionEvent
 }
 
+function parseUnitMaintenanceValue(value: unknown): UnitMaintenanceEvent | null {
+  if (!value || typeof value !== 'object') return null
+  const e = value as Record<string, unknown>
+  if (e.schema_version !== 1
+    || !['UNIT_MAINTENANCE_STARTED', 'UNIT_MAINTENANCE_ENDED'].includes(e.action as string)
+    || typeof e.event_id !== 'string' || !e.event_id
+    || typeof e.occurred_at !== 'string' || Number.isNaN(Date.parse(e.occurred_at))
+    || typeof e.unit_id !== 'number' || !Number.isInteger(e.unit_id)
+    || typeof e.unit_name !== 'string') return null
+  const starting = e.action === 'UNIT_MAINTENANCE_STARTED'
+  if (starting && (e.unit_previous_status !== 'AVAILABLE' || e.unit_new_status !== 'MAINTENANCE')) return null
+  if (!starting && (e.unit_previous_status !== 'MAINTENANCE' || e.unit_new_status !== 'AVAILABLE')) return null
+  return e as unknown as UnitMaintenanceEvent
+}
+
 export function parseDispatchEvent(raw: string): DispatchEvent | null {
   try { return parseDispatchValue(JSON.parse(raw)) } catch { return null }
 }
@@ -53,7 +68,7 @@ export function parseDispatchEvent(raw: string): DispatchEvent | null {
 export function parseFleetEvent(raw: string): FleetEvent | null {
   try {
     const value: unknown = JSON.parse(raw)
-    return parseDispatchValue(value) || parseMissionTransitionValue(value)
+    return parseDispatchValue(value) || parseMissionTransitionValue(value) || parseUnitMaintenanceValue(value)
   } catch { return null }
 }
 

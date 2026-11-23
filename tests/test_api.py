@@ -64,11 +64,11 @@ class FleetApiTestCase(ApiTestCase):
             404,
         )
 
-    def test_fleet_is_read_only_until_an_administration_service_exists(self):
+    def test_fleet_creation_requires_admin_and_valid_payload(self):
         self.authenticate_as(self.operator)
-        self.assertEqual(self.client.post(reverse('fleet:fleet_unit_list'), {}, format='json').status_code, 405)
+        self.assertEqual(self.client.post(reverse('fleet:fleet_unit_list'), {}, format='json').status_code, 403)
         self.authenticate_as(self.admin)
-        self.assertEqual(self.client.post(reverse('fleet:fleet_unit_list'), {}, format='json').status_code, 405)
+        self.assertEqual(self.client.post(reverse('fleet:fleet_unit_list'), {}, format='json').status_code, 400)
 
     def test_fleet_pagination_uses_consistent_result_envelope(self):
         for index in range(1, 22):

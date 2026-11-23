@@ -1,5 +1,5 @@
 import type { ApiClient } from './client'
-import type { Coordinates, FleetUnit, Page } from './types'
+import type { Coordinates, FleetUnit, FleetUnitHistory, FleetUnitPayload, Page } from './types'
 
 const fleetPath = '/api/v1/fleet/units/'
 
@@ -25,4 +25,37 @@ export async function loadFleet(client: ApiClient, signal?: AbortSignal): Promis
     path = next.pathname + next.search
   }
   return all
+}
+
+export function getFleetUnit(client: ApiClient, id: number, signal?: AbortSignal) {
+  return client.request<FleetUnit>(`${fleetPath}${id}/`, { signal })
+}
+
+export function createFleetUnit(client: ApiClient, payload: FleetUnitPayload) {
+  return client.request<FleetUnit>(fleetPath, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+}
+
+export function updateFleetUnit(client: ApiClient, id: number, payload: Partial<FleetUnitPayload>) {
+  return client.request<FleetUnit>(`${fleetPath}${id}/`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+}
+
+export function startMaintenance(client: ApiClient, id: number) {
+  return client.request<FleetUnit>(`${fleetPath}${id}/maintenance/`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+  })
+}
+
+export function endMaintenance(client: ApiClient, id: number) {
+  return client.request<FleetUnit>(`${fleetPath}${id}/maintenance/`, {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: '{}',
+  })
+}
+
+export function getFleetUnitHistory(client: ApiClient, id: number, page = 1, signal?: AbortSignal) {
+  const suffix = page > 1 ? `?page=${page}` : ''
+  return client.request<Page<FleetUnitHistory>>(`${fleetPath}${id}/history/${suffix}`, { signal })
 }

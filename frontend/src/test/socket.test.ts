@@ -14,6 +14,8 @@ class FakeSocket {
 }
 const event = { event_id: 'event-1', schema_version: 1, occurred_at: '2026-10-27T12:30:00Z', action: 'DISPATCH', unit_id: 7, unit_name: 'Alfa', new_status: 'BUSY', mission_id: 3, lat: -9, lon: -35 }
 const completed = { event_id: 'event-2', schema_version: 1, occurred_at: '2026-10-27T12:31:00Z', action: 'MISSION_COMPLETED', mission_id: 3, mission_previous_status: 'Em Andamento', mission_new_status: 'Concluída', unit_id: 7, unit_previous_status: 'BUSY', unit_new_status: 'AVAILABLE' }
+const maintenance = { event_id: 'event-3', schema_version: 1, occurred_at: '2026-10-27T12:32:00Z', action: 'UNIT_MAINTENANCE_STARTED', unit_id: 7, unit_name: 'Alfa', unit_previous_status: 'AVAILABLE', unit_new_status: 'MAINTENANCE' }
+const maintenanceEnded = { event_id: 'event-4', schema_version: 1, occurred_at: '2026-10-27T12:33:00Z', action: 'UNIT_MAINTENANCE_ENDED', unit_id: 7, unit_name: 'Alfa', unit_previous_status: 'MAINTENANCE', unit_new_status: 'AVAILABLE' }
 function setup() {
   FakeSocket.instances = []
   vi.stubGlobal('WebSocket', FakeSocket)
@@ -85,6 +87,10 @@ describe('WebSocket da frota', () => {
     expect(parseFleetEvent(JSON.stringify(completed))).toEqual(completed)
     expect(parseFleetEvent(JSON.stringify({ ...completed, unit_new_status: 'BUSY' }))).toBeNull()
     expect(parseFleetEvent(JSON.stringify({ ...completed, action: 'UNKNOWN' }))).toBeNull()
+    expect(parseFleetEvent(JSON.stringify(maintenance))).toEqual(maintenance)
+    expect(parseFleetEvent(JSON.stringify(maintenanceEnded))).toEqual(maintenanceEnded)
+    expect(parseFleetEvent(JSON.stringify({ ...maintenance, unit_new_status: 'BUSY' }))).toBeNull()
+    expect(parseFleetEvent(JSON.stringify({ ...maintenance, action: 'UNIT_MAINTENANCE_ENDED' }))).toBeNull()
   })
 
   it('entrega e deduplica eventos terminais válidos', () => {
@@ -95,6 +101,10 @@ describe('WebSocket da frota', () => {
     ws.onmessage?.({ data: JSON.stringify(completed) })
     expect(options.onEvent).toHaveBeenCalledOnce()
     expect(options.onEvent).toHaveBeenCalledWith(completed)
+    ws.onmessage?.({ data: JSON.stringify(maintenanceEnded) })
+    ws.onmessage?.({ data: JSON.stringify(maintenanceEnded) })
+    expect(options.onEvent).toHaveBeenCalledTimes(2)
+    expect(options.onEvent).toHaveBeenLastCalledWith(maintenanceEnded)
     socket.stop()
   })
 
